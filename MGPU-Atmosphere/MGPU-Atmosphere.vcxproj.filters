@@ -1,0 +1,49 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="..\Submodule\imgui\backends\imgui_impl_dx12.cpp" />
+    <ClCompile Include="..\Submodule\imgui\backends\imgui_impl_win32.cpp" />
+    <ClCompile Include="..\Submodule\imgui\imgui.cpp" />
+    <ClCompile Include="..\Submodule\imgui\imgui_demo.cpp" />
+    <ClCompile Include="..\Submodule\imgui\imgui_draw.cpp" />
+    <ClCompile Include="..\Submodule\imgui\imgui_tables.cpp" />
+    <ClCompile Include="..\Submodule\imgui\imgui_widgets.cpp" />
+    <ClCompile Include="FrameResource.cpp" />
+    <ClCompile Include="HybridAtmosphereApp.cpp" />
+    <ClCompile Include="SharedHBAO.cpp" />
+    <ClCompile Include="SharedSSAO.cpp" />
+    <ClCompile Include="Source.cpp" />
+    <ClCompile Include="UILayer.cpp" />
+    <ClCompile Include="TerrainRenderer.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\Submodule\imgui\backends\imgui_impl_dx12.h" />
+    <ClInclude Include="..\Submodule\imgui\backends\imgui_impl_win32.h" />
+    <ClInclude Include="..\Submodule\imgui\imconfig.h" />
+    <ClInclude Include="..\Submodule\imgui\imgui.h" />
+    <ClInclude Include="..\Submodule\imgui\imgui_internal.h" />
+    <ClInclude Include="..\Submodule\imgui\imstb_rectpack.h" />
+    <ClInclude Include="..\Submodule\imgui\imstb_textedit.h" />
+    <ClInclude Include="..\Submodule\imgui\imstb_truetype.h" />
+    <ClInclude Include="FrameResource.h" />
+    <ClInclude Include="HybridAtmosphereApp.h" />
+    <ClInclude Include="SharedHBAO.h" />
+    <ClInclude Include="SharedSSAO.h" />
+    <ClInclude Include="UILayer.h" />
+    <ClInclude Include="TerrainRenderer.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="packages.config" />
+    <None Include="Shaders\Terrain\Terrain.hlsl">
+      <Filter>Shaders\Terrain</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Shaders">
+      <UniqueIdentifier>{6fd38eaf-8486-412b-a935-5e8dfce44050}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Shaders\Terrain">
+      <UniqueIdentifier>{14d8c33c-e186-4d83-a1f2-39feb1be26f8}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>
