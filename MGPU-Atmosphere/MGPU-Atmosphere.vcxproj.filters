@@ -15,6 +15,9 @@
     <ClCompile Include="Source.cpp" />
     <ClCompile Include="UILayer.cpp" />
     <ClCompile Include="TerrainRenderer.cpp" />
+    <ClCompile Include="CustomShaderLoader\GShaderCustomInclude.cpp">
+      <Filter>CustomShaderLoader</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\Submodule\imgui\backends\imgui_impl_dx12.h" />
@@ -31,6 +34,15 @@
     <ClInclude Include="SharedSSAO.h" />
     <ClInclude Include="UILayer.h" />
     <ClInclude Include="TerrainRenderer.h" />
+    <ClInclude Include="CustomShaderLoader\GShaderCustomInclude.h">
+      <Filter>CustomShaderLoader</Filter>
+    </ClInclude>
+    <ClInclude Include="CustomShaderLoader\CustomShaderUtils.h">
+      <Filter>CustomShaderLoader</Filter>
+    </ClInclude>
+    <ClInclude Include="CustomShaderLoader\CustomInclude.h">
+      <Filter>CustomShaderLoader</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
@@ -44,6 +56,9 @@
     </Filter>
     <Filter Include="Shaders\Terrain">
       <UniqueIdentifier>{14d8c33c-e186-4d83-a1f2-39feb1be26f8}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="CustomShaderLoader">
+      <UniqueIdentifier>{ea18d141-cc54-4078-96f7-47b3b29bf9ff}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
 </Project>

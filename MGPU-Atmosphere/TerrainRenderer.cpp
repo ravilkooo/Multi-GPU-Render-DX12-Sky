@@ -19,7 +19,7 @@ TerrainRenderer::TerrainRenderer(const std::shared_ptr<GDevice>& device, const s
 
 	auto desc = heigtMapTexture.GetD3D12Resource()->GetDesc();
 	srvDesc.Format = GetSRGBFormat(desc.Format);
-	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURECUBE;
+	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
 	srvDesc.TextureCube.MipLevels = desc.MipLevels;
 	srvDesc.TextureCube.MostDetailedMip = 0;
 	heigtMapTexture.CreateShaderResourceView(&srvDesc, srvMemory, offset);

@@ -97,6 +97,7 @@ void RenderModeFactory::LoadDefaultPSO(std::shared_ptr<GDevice> device, std::sha
 
     depthStencilDesc = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
     depthStencilDesc.DepthFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
+    depthStencilDesc.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
     skyBoxPSO->SetDepthStencilState(depthStencilDesc);
     rasterizedDesc = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
     rasterizedDesc.CullMode = D3D12_CULL_MODE_NONE;

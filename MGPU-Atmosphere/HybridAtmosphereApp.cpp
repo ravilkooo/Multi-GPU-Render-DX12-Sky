@@ -19,6 +19,8 @@
 #include "Services/States/WaitState.h"
 
 #include "TerrainRenderer.h"
+#include "CustomShaderLoader/CustomInclude.h"
+#include "CustomShaderLoader/GShaderCustomInclude.h"
 
 HybridAtmosphereApp::HybridAtmosphereApp(const HINSTANCE hInstance) : D3DApp(hInstance), debugLogger(FileQueueWriter(std::filesystem::current_path() / "log.txt"))
 {
@@ -294,6 +296,9 @@ void HybridAtmosphereApp::PopulateForwardPathCommands(const std::shared_ptr<GCom
         cmdList->SetPipelineState(*defaultPrimePipelineResources.GetPSO(RenderMode::Opaque));
         PopulateDrawCommands(cmdList, (RenderMode::Opaque));
 
+        cmdList->SetPipelineState(*mAtmosphereAppPSOs[RenderMode::Terrain]);
+        PopulateDrawCommands(cmdList, RenderMode::Terrain);
+
         cmdList->SetPipelineState(*defaultPrimePipelineResources.GetPSO(RenderMode::OpaqueAlphaDrop));
         PopulateDrawCommands(cmdList, (RenderMode::OpaqueAlphaDrop));
 
@@ -412,8 +417,10 @@ bool HybridAtmosphereApp::Initialize()
     InitMainWindow();
 
     LoadStudyTexture();
+    LoadCustomTextures();
     LoadModels();
     CreateMaterials();
+    LoadCustomMaterials();
     MipMasGenerate();
 
     InitRenderPaths();
@@ -421,6 +428,7 @@ bool HybridAtmosphereApp::Initialize()
     InitRootSignature();
     InitPipeLineResource();
     CreateGO();
+    CreateCustomGO();
     SortGO();
     InitFrameResource();
 
@@ -585,7 +593,8 @@ void HybridAtmosphereApp::InitRootSignature()
     texParam[3].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
                      assets->GetLoadTexturesCount() > 0 ? assets->GetLoadTexturesCount() : 1,
                      StandardShaderSlot::TexturesMap - 3, 0);
-    texParam[4].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, TerrainRenderer::sHeightMapShaderSlot, TerrainRenderer::sHeightMapShaderSpace); //TerrainHeightmapTex
+    texParam[4].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, TerrainRenderer::sHeightMapShaderSlot,
+        TerrainRenderer::sHeightMapShaderSpace); //TerrainHeightmapTex
 
 
     rootSignature->AddConstantBufferParameter(0);
@@ -595,7 +604,7 @@ void HybridAtmosphereApp::InitRootSignature()
     rootSignature->AddDescriptorParameter(&texParam[1], 1, D3D12_SHADER_VISIBILITY_PIXEL);
     rootSignature->AddDescriptorParameter(&texParam[2], 1, D3D12_SHADER_VISIBILITY_PIXEL);
     rootSignature->AddDescriptorParameter(&texParam[3], 1, D3D12_SHADER_VISIBILITY_PIXEL);
-    rootSignature->AddDescriptorParameter(&texParam[4], 1, D3D12_SHADER_VISIBILITY_PIXEL);
+    rootSignature->AddDescriptorParameter(&texParam[4], 1, D3D12_SHADER_VISIBILITY_VERTEX);
     rootSignature->Initialize(primeDevice);
 
     primeDeviceSignature = rootSignature;
@@ -629,9 +638,12 @@ void HybridAtmosphereApp::InitPipeLineResource()
 
     defaultPrimePipelineResources = RenderModeFactory();
     defaultPrimePipelineResources.LoadDefaultShaders();
+    LoadCustomShaders();
     defaultPrimePipelineResources.LoadDefaultPSO(primeDevice, primeDeviceSignature, desc,
                                                  BackBufferFormat, DXGI_FORMAT_D32_FLOAT, nullptr,
                                                  NormalMapFormat, AmbientMapFormat);
+    LoadCustomPSOs(primeDevice, primeDeviceSignature, desc,
+        BackBufferFormat, DXGI_FORMAT_D32_FLOAT);
 
     debugLogger.PushMessage(std::wstring(L"\nInit PSO for " + primeDevice->GetName()));
 }
@@ -1576,11 +1588,12 @@ void HybridAtmosphereApp::LoadCustomPSOs(std::shared_ptr<GDevice> device, std::s
 void HybridAtmosphereApp::LoadCustomTextures()
 {
     // Use default textures for now
+    LoadTerrainTexture();
 }
 
 void HybridAtmosphereApp::LoadCustomMaterials()
 {
-    
+    LoadTerrainMaterials();
 }
 
 void HybridAtmosphereApp::CreateCustomGO()
@@ -1590,8 +1603,19 @@ void HybridAtmosphereApp::CreateCustomGO()
 
 void HybridAtmosphereApp::LoadTerrainShader()
 {
+    std::vector<std::string> dirs{
+        "Shaders",
+        "Shaders/Terrain"
+    };
+
+    mAtmosphereAppShaders["TerrainVS"] = std::move(
+        std::make_shared<GShaderCustomInclude>(2u, dirs,
+            L"Shaders\\Terrain\\Terrain.hlsl", VertexShader, nullptr, "TerrainVS", "vs_5_1"));
+
+    /*
     mAtmosphereAppShaders["TerrainVS"] = std::move(
         std::make_shared<GShader>(L"Shaders\\Terrain\\Terrain.hlsl", VertexShader, nullptr, "TerrainVS", "vs_5_1"));
+    */
 
     /*    
     mAtmosphereAppShaders["TerrainPS"] = std::move(
@@ -1611,6 +1635,8 @@ void HybridAtmosphereApp::LoadTerrainPSO(std::shared_ptr<GRootSignature> rootSig
     terrainPsoDesc.VS = mAtmosphereAppShaders["TerrainVS"]->GetShaderResource();
     terrainPsoDesc.PS = defaultPrimePipelineResources.GetShader("OpaquePixel")->GetShaderResource();
     terrainPsoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
+    terrainPsoDesc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
+    terrainPsoDesc.RasterizerState.DepthClipEnable = false;
     terrainPsoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
     terrainPsoDesc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
     terrainPsoDesc.SampleMask = UINT_MAX;
@@ -1622,8 +1648,6 @@ void HybridAtmosphereApp::LoadTerrainPSO(std::shared_ptr<GRootSignature> rootSig
     terrainPsoDesc.DSVFormat = depthStencilFormat;
 
     auto depthStencilDesc = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
-    auto rasterizedDesc = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
-
 
     auto terrainPSO = std::make_shared<GraphicPSO>(RenderMode::Terrain);
     terrainPSO->SetPsoDesc(terrainPsoDesc);

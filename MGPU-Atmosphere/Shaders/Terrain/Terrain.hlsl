@@ -28,7 +28,7 @@ struct VertexOut
 // #include "SkyAtmosphereCommon.hlsl"
 float4 SampleTerrain(in float quadx, in float quady, in float3 qp)
 {
-    const float terrainWidth = 100.0f; // 100 km edge
+    const float terrainWidth = 100000.0f; // 100 km edge
     const float maxTerrainHeight = 100.0f;
     const float quadWidth = terrainWidth / gTerrainResolution;
 
@@ -44,8 +44,15 @@ float4 SampleTerrain(in float quadx, in float quady, in float3 qp)
     HeightAccum += terrainHeightMap.SampleLevel(gsamLinearClamp, Uvs + float2(0.0f, -offset), 0).r;
     const float height = HeightAccum / 5;
 #endif
-    float4 WorldPos = float4((float3(quadx, quady, maxTerrainHeight * height) + qp) * quadWidth - 0.5f * float3(terrainWidth, terrainWidth, 0.0), 1.0f);
-    WorldPos.xyz += float3(-terrainWidth * 0.45, 0.4 * terrainWidth, -0.0f); // offset to position view
+    float4 WorldPos = float4(
+	(float3(
+			quadx,
+			quady,
+			maxTerrainHeight * height) + qp)
+	* quadWidth - 0.5f * float3(terrainWidth, terrainWidth, 0),
+	1.0f);
+    WorldPos.z -= maxTerrainHeight * quadWidth * 0.5f;
+    // WorldPos.xyz += float3(-terrainWidth * 0.45, 0.4 * terrainWidth, -0.0f); // offset to position view
     return WorldPos;
 }
 
@@ -68,7 +75,7 @@ VertexOut TerrainVS(VertexIn vin, uint vertexId : SV_VertexID, uint instanceId :
     const float quady = quadId % gTerrainResolution;
 
     float2 Uvs = (float2(quadx, quady) + qp.xy) / gTerrainResolution;
-    float4 WorldPos = SampleTerrain(quadx, quady, qp);
+    float4 WorldPos = SampleTerrain(quadx, quady, qp).yzxw;
 
 
     output.PosW = WorldPos;
@@ -77,10 +84,10 @@ VertexOut TerrainVS(VertexIn vin, uint vertexId : SV_VertexID, uint instanceId :
 
 	{
         const float offset = 5.0;
-        float4 WorldPos0_ = SampleTerrain(quadx + qp.x - offset, quady + qp.y, 0.0f);
-        float4 WorldPos1_ = SampleTerrain(quadx + qp.x + offset, quady + qp.y, 0.0f);
-        float4 WorldPos_0 = SampleTerrain(quadx + qp.x, quady + qp.y - offset, 0.0f);
-        float4 WorldPos_1 = SampleTerrain(quadx + qp.x, quady + qp.y + offset, 0.0f);
+        float3 WorldPos0_ = SampleTerrain(quadx + qp.x - offset, quady + qp.y, 0.0f).yzx;
+        float3 WorldPos1_ = SampleTerrain(quadx + qp.x + offset, quady + qp.y, 0.0f).yzx;
+        float3 WorldPos_0 = SampleTerrain(quadx + qp.x, quady + qp.y - offset, 0.0f).yzx;
+        float3 WorldPos_1 = SampleTerrain(quadx + qp.x, quady + qp.y + offset, 0.0f).yzx;
         output.TangentW = normalize(WorldPos1_.xyz - WorldPos0_.xyz);
         output.NormalW = cross(output.TangentW, normalize(WorldPos_1.xyz - WorldPos_0.xyz));
         output.NormalW = normalize(output.NormalW);

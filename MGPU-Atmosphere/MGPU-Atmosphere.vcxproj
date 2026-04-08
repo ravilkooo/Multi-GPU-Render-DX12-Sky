@@ -158,6 +158,7 @@
     <ClCompile Include="..\Submodule\imgui\imgui_draw.cpp" />
     <ClCompile Include="..\Submodule\imgui\imgui_tables.cpp" />
     <ClCompile Include="..\Submodule\imgui\imgui_widgets.cpp" />
+    <ClCompile Include="CustomShaderLoader\GShaderCustomInclude.cpp" />
     <ClCompile Include="FrameResource.cpp" />
     <ClCompile Include="HybridAtmosphereApp.cpp" />
     <ClCompile Include="SharedHBAO.cpp" />
@@ -191,6 +192,9 @@
     <ClInclude Include="..\Submodule\imgui\imstb_rectpack.h" />
     <ClInclude Include="..\Submodule\imgui\imstb_textedit.h" />
     <ClInclude Include="..\Submodule\imgui\imstb_truetype.h" />
+    <ClInclude Include="CustomShaderLoader\CustomInclude.h" />
+    <ClInclude Include="CustomShaderLoader\CustomShaderUtils.h" />
+    <ClInclude Include="CustomShaderLoader\GShaderCustomInclude.h" />
     <ClInclude Include="FrameResource.h" />
     <ClInclude Include="HybridAtmosphereApp.h" />
     <ClInclude Include="SharedHBAO.h" />
