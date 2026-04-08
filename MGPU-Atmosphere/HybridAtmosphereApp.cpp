@@ -1026,6 +1026,7 @@ void HybridAtmosphereApp::CreateGO()
     camera->GetTransform()->SetPosition(Vector3(-1000, 190, -32));
     camera->GetTransform()->SetEulerRotate(Vector3(-30, 270, 0));
     camera->AddComponent(std::make_shared<Camera>(AspectRatio()));
+    camera->GetComponent<Camera>()->SetFarZ(30000.0f);
     CameraSaveMatrix = camera->GetTransform()->GetLocalMatrix();
 
 #if defined(DEBUG) || defined(_DEBUG)
@@ -1270,8 +1271,8 @@ void HybridAtmosphereApp::UpdateMainPassCB(const GameTimer& gt)
                                           static_cast<float>(MainWindow->GetClientHeight()));
     mainPassCB.InvRenderTargetSize = Vector2(1.0f / mainPassCB.RenderTargetSize.x,
                                              1.0f / mainPassCB.RenderTargetSize.y);
-    mainPassCB.NearZ = 1.0f;
-    mainPassCB.FarZ = 1000.0f;
+    mainPassCB.NearZ = camera->GetNearZ();
+    mainPassCB.FarZ = camera->GetFarZ();
     mainPassCB.TotalTime = gt.TotalTime();
     mainPassCB.DeltaTime = gt.DeltaTime();
     mainPassCB.AmbientLight = Vector4{0.25f, 0.25f, 0.35f, 1.0f};
@@ -1635,8 +1636,8 @@ void HybridAtmosphereApp::LoadTerrainPSO(std::shared_ptr<GRootSignature> rootSig
     terrainPsoDesc.VS = mAtmosphereAppShaders["TerrainVS"]->GetShaderResource();
     terrainPsoDesc.PS = defaultPrimePipelineResources.GetShader("OpaquePixel")->GetShaderResource();
     terrainPsoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
-    terrainPsoDesc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
-    terrainPsoDesc.RasterizerState.DepthClipEnable = false;
+    terrainPsoDesc.RasterizerState.CullMode = D3D12_CULL_MODE_BACK;
+    // terrainPsoDesc.RasterizerState.DepthClipEnable = false;
     terrainPsoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
     terrainPsoDesc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
     terrainPsoDesc.SampleMask = UINT_MAX;

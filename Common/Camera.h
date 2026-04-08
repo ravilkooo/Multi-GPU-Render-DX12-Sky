@@ -38,9 +38,19 @@ public:
 
     void SetAspectRatio(float aspect);
 
+    float GetAspectRatio() const;
+
     void SetFov(float fov);
 
     float GetFov() const;
+
+    void SetFarZ(float newFarZ);
+
+    float GetFarZ() const;
+
+    void SetNearZ(float newNearZ);
+
+    float GetNearZ() const;
 
     const Matrix& GetViewMatrix() const;
 

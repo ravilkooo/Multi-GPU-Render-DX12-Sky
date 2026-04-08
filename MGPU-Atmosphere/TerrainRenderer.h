@@ -23,7 +23,6 @@ public:
 
 protected:
     void Draw(const std::shared_ptr<GCommandList>& cmdList) override;
-    void Update() override;
 
     uint32_t mTerrainResolution = 512u;
 };

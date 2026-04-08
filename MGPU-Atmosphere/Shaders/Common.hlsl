@@ -44,6 +44,7 @@ struct WorldData
     float TotalTime;
     float DeltaTime;
     float4 AmbientLight;
+    
 
     float3 CameraForwardVector;
     float padding;

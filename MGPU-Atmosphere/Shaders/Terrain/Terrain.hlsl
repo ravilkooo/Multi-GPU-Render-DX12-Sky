@@ -3,6 +3,8 @@
 #include "../Common.hlsl"
 
 const static uint gTerrainResolution = 512;
+const static uint gTextureResolution = 512;
+const static float terrainWidth = 10000.0f;
 // Texture2D terrainHeightMap : register(t0);
 
 // unused
@@ -28,7 +30,7 @@ struct VertexOut
 // #include "SkyAtmosphereCommon.hlsl"
 float4 SampleTerrain(in float quadx, in float quady, in float3 qp)
 {
-    const float terrainWidth = 100000.0f; // 100 km edge
+    // const float terrainWidth = 10000.0f; // 10 km edge
     const float maxTerrainHeight = 100.0f;
     const float quadWidth = terrainWidth / gTerrainResolution;
 
@@ -74,7 +76,7 @@ VertexOut TerrainVS(VertexIn vin, uint vertexId : SV_VertexID, uint instanceId :
     const float quadx = quadId / gTerrainResolution;
     const float quady = quadId % gTerrainResolution;
 
-    float2 Uvs = (float2(quadx, quady) + qp.xy) / gTerrainResolution;
+    float2 Uvs = (float2(quadx, quady) + qp.xy) / gTerrainResolution / terrainWidth;
     float4 WorldPos = SampleTerrain(quadx, quady, qp).yzxw;
 
 
@@ -98,6 +100,7 @@ VertexOut TerrainVS(VertexIn vin, uint vertexId : SV_VertexID, uint instanceId :
 
     // Generate projective tex-coords to project shadow map onto scene.
     output.ShadowPosH = mul(WorldPos, worldBuffer.ShadowTransform);
+    output.ShadowPosH.z = 0;
 	
     return output;
 }

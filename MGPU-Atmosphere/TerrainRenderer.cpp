@@ -27,10 +27,9 @@ TerrainRenderer::TerrainRenderer(const std::shared_ptr<GDevice>& device, const s
 
 void TerrainRenderer::Draw(const std::shared_ptr<GCommandList>& cmdList)
 {
-	/*
 	cmdList->SetRootConstantBufferView(StandardShaderSlot::ObjectData,
 		*modelDataBuffer, 0);
-	*/
+
 	// 7th root parameter
 	cmdList->GetGraphicsCommandList()->SetGraphicsRootDescriptorTable(7,
 		gpuTextureHandle);
@@ -39,8 +38,4 @@ void TerrainRenderer::Draw(const std::shared_ptr<GCommandList>& cmdList)
 	cmdList->GetGraphicsCommandList()->IASetIndexBuffer(nullptr);
 	cmdList->GetGraphicsCommandList()->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 	cmdList->Draw(6, mTerrainResolution * mTerrainResolution);
-}
-
-void TerrainRenderer::Update()
-{
 }
