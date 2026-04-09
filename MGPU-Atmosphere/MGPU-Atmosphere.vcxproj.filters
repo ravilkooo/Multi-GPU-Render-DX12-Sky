@@ -55,19 +55,28 @@
     <None Include="Shaders\Terrain\Terrain.hlsl">
       <Filter>Shaders\Terrain</Filter>
     </None>
-    <None Include="Shaders\SkyAtmosphere\TransmittanceLut.hlsl">
-      <Filter>Shaders\SkyAtmosphere</Filter>
-    </None>
-    <None Include="Shaders\SkyAtmosphere\Bruneton.hlsl">
-      <Filter>Shaders\SkyAtmosphere</Filter>
-    </None>
-    <None Include="Shaders\SkyAtmosphere\BrunetonDefinitions.hlsl">
-      <Filter>Shaders\SkyAtmosphere</Filter>
-    </None>
-    <None Include="Shaders\SkyAtmosphere\BrunetonFunctions.hlsl">
-      <Filter>Shaders\SkyAtmosphere</Filter>
-    </None>
     <None Include="Shaders\SkyAtmosphere\AtmosphereCommon.hlsl">
+      <Filter>Shaders\SkyAtmosphere</Filter>
+    </None>
+    <None Include="Shaders\SkyAtmosphere\ComputeSkyCommon.hlsl">
+      <Filter>Shaders\SkyAtmosphere</Filter>
+    </None>
+    <None Include="Shaders\SkyAtmosphere\SkyAtmosphereCommon.hlsl">
+      <Filter>Shaders\SkyAtmosphere</Filter>
+    </None>
+    <None Include="Shaders\SkyAtmosphere\Bruneton\Bruneton.hlsl">
+      <Filter>Shaders\SkyAtmosphere\Bruneton</Filter>
+    </None>
+    <None Include="Shaders\SkyAtmosphere\Bruneton\BrunetonDefinitions.hlsl">
+      <Filter>Shaders\SkyAtmosphere\Bruneton</Filter>
+    </None>
+    <None Include="Shaders\SkyAtmosphere\Bruneton\BrunetonFunctions.hlsl">
+      <Filter>Shaders\SkyAtmosphere\Bruneton</Filter>
+    </None>
+    <None Include="Shaders\SkyAtmosphere\Bruneton\BrunetonTransmittanceLut.hlsl">
+      <Filter>Shaders\SkyAtmosphere\Bruneton</Filter>
+    </None>
+    <None Include="Shaders\SkyAtmosphere\ComputeSkyRayMarching.hlsl">
       <Filter>Shaders\SkyAtmosphere</Filter>
     </None>
   </ItemGroup>
@@ -86,6 +95,9 @@
     </Filter>
     <Filter Include="Shaders\SkyAtmosphere">
       <UniqueIdentifier>{186997c7-a2f1-49d1-abb3-2a8484d035e6}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Shaders\SkyAtmosphere\Bruneton">
+      <UniqueIdentifier>{29321e02-8ce9-49c5-852d-bcadf590de71}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
 </Project>

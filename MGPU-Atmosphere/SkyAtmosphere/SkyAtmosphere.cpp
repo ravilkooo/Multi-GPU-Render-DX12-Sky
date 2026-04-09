@@ -55,21 +55,41 @@ void Atmosphere::SkyAtmosphere::SetupEarthAtmosphere()
     memset(&cb, 0xBA, sizeof(AtmosphereCB));
     atmosphereCB->CopyData(0, cb);
 
-    LUTConstantsCB = std::make_shared<ConstantUploadBuffer<LUTConstants>>(mDevice, 1, L"LUTConstantsCB CB");
-    LUTConstantsCB->CopyData(0, lutConstanants);
+    commonCB = std::make_shared<ConstantUploadBuffer<CommonConstantBufferStructure>>(mDevice, 1, L"CommonConstantsCB CB");
+    commonCB->CopyData(0, commonConstanants);
 }
 
 void Atmosphere::SkyAtmosphere::InitRootSignatures()
 {
     // Build a dedicated root signature for the transmittance pass (it needs b1 and b2 CBs)
     mRootSignature = std::make_shared<GRootSignature>();
+    mRootSignature->AddConstantBufferParameter(0); // commmon_BUFFER
     mRootSignature->AddConstantBufferParameter(1); // SKYATMOSPHERE_BUFFER
-    mRootSignature->AddConstantBufferParameter(0, 1); // LutConstants (Dimensions, InvDimensions)
+    //mRootSignature->AddConstantBufferParameter(0, 1); // LutConstants (Dimensions, InvDimensions)
 
 
-    CD3DX12_DESCRIPTOR_RANGE uavRange;
-    uavRange.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 0, 0); // u0 transmittance output
-    mRootSignature->AddDescriptorParameter(&uavRange, 1);
+    CD3DX12_DESCRIPTOR_RANGE uavRange0;
+    CD3DX12_DESCRIPTOR_RANGE uavRange1;
+    CD3DX12_DESCRIPTOR_RANGE uavRange2;
+    uavRange0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 0, 0); // u0 transmittance output
+    uavRange1.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 1, 0); // u1 multiscat output
+    uavRange2.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 0, 1); // u0, space1 skyview output
+    mRootSignature->AddDescriptorParameter(&uavRange0, 1);
+    mRootSignature->AddDescriptorParameter(&uavRange1, 1);
+    mRootSignature->AddDescriptorParameter(&uavRange2, 1);
+
+    CD3DX12_DESCRIPTOR_RANGE srvRange0;
+    CD3DX12_DESCRIPTOR_RANGE srvRange1;
+    CD3DX12_DESCRIPTOR_RANGE srvRange2;
+    CD3DX12_DESCRIPTOR_RANGE srvRange3;
+    srvRange0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0, 0); // t0 transmittance
+    srvRange1.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 1, 0); // t1 multiscat
+    srvRange2.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 2, 0); // t2, skyview
+    srvRange3.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 3, 0); // t3, shadow
+    mRootSignature->AddDescriptorParameter(&srvRange0, 1);
+    mRootSignature->AddDescriptorParameter(&srvRange1, 1);
+    mRootSignature->AddDescriptorParameter(&srvRange2, 1);
+    mRootSignature->AddDescriptorParameter(&srvRange3, 1);
 
     mRootSignature->Initialize(mDevice);
 }
@@ -83,8 +103,13 @@ void Atmosphere::SkyAtmosphere::LoadShaders()
     };
     */
 
+    mAtmosphereShaders["brunetonTransmittanceCS"] = std::move(
+        std::make_shared<GShader>(L"Shaders\\SkyAtmosphere\\Bruneton\\BrunetonTransmittanceLut.hlsl", ComputeShader, nullptr, "TransmittanceLutCS_Bruneton", "cs_5_1"));
+
     mAtmosphereShaders["transmittanceCS"] = std::move(
-        std::make_shared<GShader>(L"Shaders\\SkyAtmosphere\\TransmittanceLut.hlsl", ComputeShader, nullptr, "TransmittanceLutCS", "cs_5_1"));
+        std::make_shared<GShader>(L"Shaders\\SkyAtmosphere\\ComputeSkyRayMarching.hlsl", ComputeShader, nullptr, "ComputeTransmittanceLutCS", "cs_5_1"));
+
+    // mAtmosphereShaders["multiscatCS"] = std::move(std::make_shared<GShader>(L"Shaders\\SkyAtmosphere\\TransmittanceLut.hlsl", ComputeShader, nullptr, "ComputeMultiScattCS", "cs_5_1"));
 
     for (auto&& pair : mAtmosphereShaders)
     {
@@ -94,14 +119,18 @@ void Atmosphere::SkyAtmosphere::LoadShaders()
 
 void Atmosphere::SkyAtmosphere::InitPSOs()
 {
-
-    D3D12_COMPUTE_PIPELINE_STATE_DESC transmittancePsoDesc;
-
     auto transmittancePSO = std::make_shared<ComputePSO>();
     transmittancePSO->SetShader(mAtmosphereShaders["transmittanceCS"].get());
     transmittancePSO->SetRootSignature(*mRootSignature);
 
     mAtmospherePSOs["transmittance"] = std::move(transmittancePSO);
+    /*
+    auto multiscatPSO = std::make_shared<ComputePSO>();
+    multiscatPSO->SetShader(mAtmosphereShaders["multiscatCS"].get());
+    multiscatPSO->SetRootSignature(*mRootSignature);
+
+    mAtmospherePSOs["multiscat"] = std::move(multiscatPSO);
+    */
 
     for (auto& pso : mAtmospherePSOs)
     {
@@ -156,10 +185,10 @@ void Atmosphere::SkyAtmosphere::PopulateTransmittanceLutCommands(const std::shar
     cmdList->SetComputeRootSignature(*mRootSignature);
     cmdList->SetPipelineState(*mAtmospherePSOs["transmittance"]);
     
-    if (LUTConstantsCB)
-        cmdList->SetComputeRootConstantBufferView(1, *LUTConstantsCB);
+    if (commonCB)
+        cmdList->SetComputeRootConstantBufferView(0, *commonCB);
     if (atmosphereCB)
-        cmdList->SetComputeRootConstantBufferView(0, *atmosphereCB);
+        cmdList->SetComputeRootConstantBufferView(1, *atmosphereCB);
 
     cmdList->SetComputeRootDescriptorTable(2, &transmittanceLutUAV);
 
@@ -241,4 +270,7 @@ void Atmosphere::SkyAtmosphere::UpdateSkyAtmosphereBuffer()
 
     if (atmosphereCB)
         atmosphereCB->CopyData(0, cb);
+
+    if (commonCB)
+        commonCB->CopyData(0, commonConstanants);
 }

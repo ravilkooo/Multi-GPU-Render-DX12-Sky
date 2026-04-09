@@ -213,23 +213,36 @@
     </None>
   </ItemGroup>
   <ItemGroup>
-    <None Include="Shaders\SkyAtmosphere\TransmittanceLut.hlsl">
-      <FileType>Document</FileType>
-    </None>
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="Shaders\SkyAtmosphere\Bruneton.hlsl">
-      <FileType>Document</FileType>
-    </None>
-    <None Include="Shaders\SkyAtmosphere\BrunetonDefinitions.hlsl">
-      <FileType>Document</FileType>
-    </None>
-    <None Include="Shaders\SkyAtmosphere\BrunetonFunctions.hlsl">
-      <FileType>Document</FileType>
-    </None>
-  </ItemGroup>
-  <ItemGroup>
     <None Include="Shaders\SkyAtmosphere\AtmosphereCommon.hlsl">
+      <FileType>Document</FileType>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Shaders\SkyAtmosphere\ComputeSkyCommon.hlsl">
+      <FileType>Document</FileType>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Shaders\SkyAtmosphere\SkyAtmosphereCommon.hlsl">
+      <FileType>Document</FileType>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Shaders\SkyAtmosphere\Bruneton\Bruneton.hlsl">
+      <FileType>Document</FileType>
+    </None>
+    <None Include="Shaders\SkyAtmosphere\Bruneton\BrunetonDefinitions.hlsl">
+      <FileType>Document</FileType>
+    </None>
+    <None Include="Shaders\SkyAtmosphere\Bruneton\BrunetonFunctions.hlsl">
+      <FileType>Document</FileType>
+    </None>
+    <None Include="Shaders\SkyAtmosphere\Bruneton\BrunetonTransmittanceLut.hlsl">
+      <FileType>Document</FileType>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Shaders\SkyAtmosphere\ComputeSkyRayMarching.hlsl">
       <FileType>Document</FileType>
     </None>
   </ItemGroup>

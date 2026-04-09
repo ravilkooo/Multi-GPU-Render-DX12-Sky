@@ -424,6 +424,27 @@ void HybridAtmosphereApp::Draw(const GameTimer& gt)
         skyAtmosphere->mSunDir.x = -tmp.x;
         skyAtmosphere->mSunDir.y = tmp.z;
         skyAtmosphere->mSunDir.z = tmp.y;
+
+
+        XMMATRIX viewMatrix = XMMatrixIdentity();
+        XMMATRIX projMatrix = XMMatrixOrthographicLH(1.0, 1.0, -1.0, 1.0);
+        XMMATRIX ViewProjMat = XMMatrixMultiply(viewMatrix, projMatrix);
+        float mSunIlluminanceScale = 1.0f;
+        int NumScatteringOrder = 4;
+
+        skyAtmosphere->commonConstanants.gViewProjMat = ViewProjMat;
+        skyAtmosphere->commonConstanants.gColor = { 0.0, 1.0, 1.0, 1.0 };
+        skyAtmosphere->commonConstanants.gResolution[0] = uint32_t(MainWindow->GetClientWidth());
+        skyAtmosphere->commonConstanants.gResolution[1] = uint32_t(MainWindow->GetClientHeight());
+        skyAtmosphere->commonConstanants.gSunIlluminance = { 1.0f * mSunIlluminanceScale, 1.0f * mSunIlluminanceScale, 1.0f * mSunIlluminanceScale };
+        skyAtmosphere->commonConstanants.gScatteringMaxPathDepth = NumScatteringOrder;
+        skyAtmosphere->commonConstanants.gFrameTimeSec = gt.DeltaTime();
+        skyAtmosphere->commonConstanants.gTimeSec = gt.TotalTime();
+        skyAtmosphere->commonConstanants.gFrameId = 0;
+        // uiViewRayMarchMaxSPP = uiViewRayMarchMinSPP >= uiViewRayMarchMaxSPP ? uiViewRayMarchMinSPP + 1 : uiViewRayMarchMaxSPP;
+        skyAtmosphere->commonConstanants.RayMarchMinMaxSPP[0] = 0.0f;
+        skyAtmosphere->commonConstanants.RayMarchMinMaxSPP[1] = 0.0f;
+        skyAtmosphere->commonConstanants.gScreenshotCaptureActive = false; // Make sure the terrain or sundisk are not taken into account to focus on the most important part: atmosphere
     }
     skyAtmosphere->UpdateSkyAtmosphereBuffer();
     skyAtmosphere->PopulateTransmittanceLutCommands(primeCmdList);
@@ -1064,8 +1085,9 @@ void HybridAtmosphereApp::CreateGO()
     auto camera = std::make_unique<GameObject>("MainCamera");
     camera->GetTransform()->SetParent(rotater->GetTransform().get());
     //camera->GetTransform()->SetPosition(Vector3(-1000, 190, -32));
-    camera->GetTransform()->SetPosition(Vector3(0, 10, 50));
-    camera->GetTransform()->SetEulerRotate(Vector3(-30, 270, 0));
+    camera->GetTransform()->SetPosition(Vector3(0, -100, -100));
+    //camera->GetTransform()->SetEulerRotate(Vector3(-30, 270, 0));
+    camera->GetTransform()->SetEulerRotate(Vector3(0, 0, 0));
     camera->AddComponent(std::make_shared<Camera>(AspectRatio()));
     camera->GetComponent<Camera>()->SetFarZ(30000.0f);
     CameraSaveMatrix = camera->GetTransform()->GetLocalMatrix();

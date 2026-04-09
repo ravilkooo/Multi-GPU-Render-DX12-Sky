@@ -12,7 +12,7 @@ cbuffer LUTConstants : register(b0, space1)
 }
 
 [numthreads(32, 32, 1)]
-void TransmittanceLutCS(uint3 dispatchThreadId : SV_DispatchThreadID)
+void TransmittanceLutCS_Bruneton(uint3 dispatchThreadId : SV_DispatchThreadID)
 {
     // Получаем размеры текстуры из константного буфера
     uint width = TransmittanceLutDimensions.x;
@@ -26,9 +26,11 @@ void TransmittanceLutCS(uint3 dispatchThreadId : SV_DispatchThreadID)
     float2 pixPos = float2(dispatchThreadId.xy);
     
     // Получаем параметры атмосферы
+    // Bruneton.hlsl
     AtmosphereParameters Parameters = GetAtmosphereParameters();
     
     // Вычисляем transmittance
+    // BrunetonFunctions.hlsl
     float3 transmittance = ComputeTransmittanceToTopAtmosphereBoundaryTexture(Parameters, pixPos);
     
     // Записываем результат в текстуру (UAV)

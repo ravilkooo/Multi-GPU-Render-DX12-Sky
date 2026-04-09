@@ -156,14 +156,28 @@ namespace Atmosphere
         LookUpTablesInfo lutInfos;
         std::shared_ptr<ConstantUploadBuffer<AtmosphereCB>> atmosphereCB;
 
-        struct LUTConstants
+        struct CommonConstantBufferStructure
         {
-            unsigned int TransmittanceLutDimensionX = 256;
-            unsigned int TransmittanceLutDimensionY = 64;
-            float InvTransmittanceLutDimensionX = 1.0f / 256.0f;
-            float InvTransmittanceLutDimensionY = 1.0f / 64.0f;
-        } lutConstanants;
-        std::shared_ptr<ConstantUploadBuffer<LUTConstants>> LUTConstantsCB;
+            Matrix gViewProjMat;
+
+            Vector4 gColor;
+
+            Vector3 gSunIlluminance;
+            int gScatteringMaxPathDepth;
+
+            unsigned int gResolution[2];
+            float gFrameTimeSec;
+            float gTimeSec;
+
+            unsigned int gMouseLastDownPos[2];
+            unsigned int gFrameId;
+            unsigned int gTerrainResolution;
+            float gScreenshotCaptureActive;
+
+            float RayMarchMinMaxSPP[2];
+            float pad[2];
+        };
+        std::shared_ptr<ConstantUploadBuffer<CommonConstantBufferStructure>> commonCB;
 
     public:
         Matrix mShadowmapViewProjMat;
@@ -173,6 +187,8 @@ namespace Atmosphere
         Vector3 mCamPosFinal;
         Vector3 mViewDir;
         Vector3 mSunDir;
+
+        CommonConstantBufferStructure commonConstanants;
 
         SkyAtmosphere(const std::shared_ptr<GDevice>& device);
 

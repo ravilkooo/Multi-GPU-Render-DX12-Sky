@@ -4,9 +4,6 @@
 #ifndef BRUNETON_HLSL
 #define BRUNETON_HLSL
 
-#include "AtmosphereCommon.hlsl"
-
-
 
 #define IN(x) const in x
 #define OUT(x) out x
