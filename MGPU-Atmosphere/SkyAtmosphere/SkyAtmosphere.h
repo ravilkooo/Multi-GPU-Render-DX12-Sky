@@ -140,6 +140,28 @@ namespace Atmosphere
         float pad10;
     };
 
+    struct CommonConstantBufferStructure
+    {
+        Matrix gViewProjMat;
+
+        Vector4 gColor;
+
+        Vector3 gSunIlluminance;
+        int gScatteringMaxPathDepth;
+
+        unsigned int gResolution[2];
+        float gFrameTimeSec;
+        float gTimeSec;
+
+        unsigned int gMouseLastDownPos[2];
+        unsigned int gFrameId;
+        unsigned int gTerrainResolution;
+        float gScreenshotCaptureActive;
+
+        float RayMarchMinMaxSPP[2];
+        float pad[2];
+    };
+
     class SkyAtmosphere
     {
         std::shared_ptr<GDevice> mDevice;
@@ -150,34 +172,19 @@ namespace Atmosphere
         custom_unordered_map<std::string, std::shared_ptr<ComputePSO>> mAtmospherePSOs =
             MemoryAllocator::CreateUnorderedMap<std::string, std::shared_ptr<ComputePSO>>();
 
-        std::shared_ptr<GTexture> transmittanceLut;
-        GDescriptor transmittanceLutUAV;
-        AtmosphereInfo atmosphereInfos;
-        LookUpTablesInfo lutInfos;
-        std::shared_ptr<ConstantUploadBuffer<AtmosphereCB>> atmosphereCB;
+        std::shared_ptr<GTexture> mTransmittanceLut;
+        GDescriptor mTransmittanceLutUAV;
+        GDescriptor mTransmittanceLutSRV;
 
-        struct CommonConstantBufferStructure
-        {
-            Matrix gViewProjMat;
+        std::shared_ptr<GTexture> mMultiScatLut;
+        GDescriptor mMultiScatLutUAV;
+        GDescriptor mMultiScatLutSRV;
 
-            Vector4 gColor;
+        AtmosphereInfo mAtmosphereInfos;
+        LookUpTablesInfo mLutInfos;
 
-            Vector3 gSunIlluminance;
-            int gScatteringMaxPathDepth;
-
-            unsigned int gResolution[2];
-            float gFrameTimeSec;
-            float gTimeSec;
-
-            unsigned int gMouseLastDownPos[2];
-            unsigned int gFrameId;
-            unsigned int gTerrainResolution;
-            float gScreenshotCaptureActive;
-
-            float RayMarchMinMaxSPP[2];
-            float pad[2];
-        };
-        std::shared_ptr<ConstantUploadBuffer<CommonConstantBufferStructure>> commonCB;
+        std::shared_ptr<ConstantUploadBuffer<AtmosphereCB>> mAtmosphereCB;
+        std::shared_ptr<ConstantUploadBuffer<CommonConstantBufferStructure>> mCommonCB;
 
     public:
         Matrix mShadowmapViewProjMat;
@@ -188,7 +195,7 @@ namespace Atmosphere
         Vector3 mViewDir;
         Vector3 mSunDir;
 
-        CommonConstantBufferStructure commonConstanants;
+        CommonConstantBufferStructure mCommonConstanants;
 
         SkyAtmosphere(const std::shared_ptr<GDevice>& device);
 
@@ -200,6 +207,8 @@ namespace Atmosphere
 
         void InitPSOs();
 
+        void LoadTransmittanceLutResource();
+        void LoadMultiScatLutResource();
         void LoadResources();
 
         void UpdateSkyAtmosphereBuffer();
@@ -214,8 +223,8 @@ namespace Atmosphere
 
 
         void PopulateTransmittanceLutCommands(const std::shared_ptr<GCommandList>& cmdList);
+        void PopulateMultiScatLutCommands(const std::shared_ptr<GCommandList>& cmdList);
         /*
-        void PopulateMultiScattTexCommands(const std::shared_ptr<GCommandList>& cmdList);
         void PopulateSkyViewLutCommands(const std::shared_ptr<GCommandList>& cmdList);
         void PopulateAerialPerspectiveCommands(const std::shared_ptr<GCommandList>& cmdList);
         void PopulateRayMarchingCommands(const std::shared_ptr<GCommandList>& cmdList);

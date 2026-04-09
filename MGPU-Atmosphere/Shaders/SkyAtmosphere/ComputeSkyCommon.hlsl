@@ -34,12 +34,13 @@ Texture2D<float4> ShadowmapTexture : register(t3, space0);
 RWTexture2D<float4> TransmittanceLutOut : register(u0, space0);
 RWTexture2D<float4> MultiScatOut : register(u1, space0);
 
-
 RWTexture2D<float4> SkyViewLutOut : register(u0, space1);
 
-
-SamplerState samplerLinearClamp : register(s0);
-SamplerComparisonState samplerShadow : register(s1);
+SamplerState samplerPointClamp : register(s0);
+SamplerState samplerLinearClamp : register(s1);
+SamplerState samplerDepthMap : register(s2);
+SamplerState samplerLinearWrap : register(s3);
+SamplerComparisonState samplerShadow : register(s4);
 
 
 /*

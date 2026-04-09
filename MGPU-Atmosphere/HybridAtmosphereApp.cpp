@@ -432,22 +432,23 @@ void HybridAtmosphereApp::Draw(const GameTimer& gt)
         float mSunIlluminanceScale = 1.0f;
         int NumScatteringOrder = 4;
 
-        skyAtmosphere->commonConstanants.gViewProjMat = ViewProjMat;
-        skyAtmosphere->commonConstanants.gColor = { 0.0, 1.0, 1.0, 1.0 };
-        skyAtmosphere->commonConstanants.gResolution[0] = uint32_t(MainWindow->GetClientWidth());
-        skyAtmosphere->commonConstanants.gResolution[1] = uint32_t(MainWindow->GetClientHeight());
-        skyAtmosphere->commonConstanants.gSunIlluminance = { 1.0f * mSunIlluminanceScale, 1.0f * mSunIlluminanceScale, 1.0f * mSunIlluminanceScale };
-        skyAtmosphere->commonConstanants.gScatteringMaxPathDepth = NumScatteringOrder;
-        skyAtmosphere->commonConstanants.gFrameTimeSec = gt.DeltaTime();
-        skyAtmosphere->commonConstanants.gTimeSec = gt.TotalTime();
-        skyAtmosphere->commonConstanants.gFrameId = 0;
+        skyAtmosphere->mCommonConstanants.gViewProjMat = ViewProjMat;
+        skyAtmosphere->mCommonConstanants.gColor = { 0.0, 1.0, 1.0, 1.0 };
+        skyAtmosphere->mCommonConstanants.gResolution[0] = uint32_t(MainWindow->GetClientWidth());
+        skyAtmosphere->mCommonConstanants.gResolution[1] = uint32_t(MainWindow->GetClientHeight());
+        skyAtmosphere->mCommonConstanants.gSunIlluminance = { 1.0f * mSunIlluminanceScale, 1.0f * mSunIlluminanceScale, 1.0f * mSunIlluminanceScale };
+        skyAtmosphere->mCommonConstanants.gScatteringMaxPathDepth = NumScatteringOrder;
+        skyAtmosphere->mCommonConstanants.gFrameTimeSec = gt.DeltaTime();
+        skyAtmosphere->mCommonConstanants.gTimeSec = gt.TotalTime();
+        skyAtmosphere->mCommonConstanants.gFrameId = 0;
         // uiViewRayMarchMaxSPP = uiViewRayMarchMinSPP >= uiViewRayMarchMaxSPP ? uiViewRayMarchMinSPP + 1 : uiViewRayMarchMaxSPP;
-        skyAtmosphere->commonConstanants.RayMarchMinMaxSPP[0] = 0.0f;
-        skyAtmosphere->commonConstanants.RayMarchMinMaxSPP[1] = 0.0f;
-        skyAtmosphere->commonConstanants.gScreenshotCaptureActive = false; // Make sure the terrain or sundisk are not taken into account to focus on the most important part: atmosphere
+        skyAtmosphere->mCommonConstanants.RayMarchMinMaxSPP[0] = 0.0f;
+        skyAtmosphere->mCommonConstanants.RayMarchMinMaxSPP[1] = 0.0f;
+        skyAtmosphere->mCommonConstanants.gScreenshotCaptureActive = false; // Make sure the terrain or sundisk are not taken into account to focus on the most important part: atmosphere
     }
     skyAtmosphere->UpdateSkyAtmosphereBuffer();
     skyAtmosphere->PopulateTransmittanceLutCommands(primeCmdList);
+    skyAtmosphere->PopulateMultiScatLutCommands(primeCmdList);
 
     PopulateNormalMapCommands(primeCmdList);
     PopulateAmbientMapCommands(primeCmdList);
