@@ -17,6 +17,8 @@
 #include "Services/FileQueueWriter.h"
 #include "Services/BenchmarkService.h"
 
+#include "SkyAtmosphere/SkyAtmosphere.h"
+
 class HybridAtmosphereApp final :
     public Common::D3DApp
 {
@@ -39,8 +41,8 @@ protected:
     Atmosphere functions
     */
 
-    custom_unordered_map<std::string, std::shared_ptr<GShader>> mAtmosphereAppShaders = MemoryAllocator::CreateUnorderedMap<std::string, std::shared_ptr<GShader>>();
-    custom_unordered_map<RenderMode, std::shared_ptr<GraphicPSO>> mAtmosphereAppPSOs = MemoryAllocator::CreateUnorderedMap<
+    custom_unordered_map<std::string, std::shared_ptr<GShader>> mCustomAppShaders = MemoryAllocator::CreateUnorderedMap<std::string, std::shared_ptr<GShader>>();
+    custom_unordered_map<RenderMode, std::shared_ptr<GraphicPSO>> mCustomAppPSOs = MemoryAllocator::CreateUnorderedMap<
         RenderMode, std::shared_ptr<GraphicPSO>>();
 
     void LoadCustomShaders();
@@ -59,6 +61,7 @@ protected:
     void LoadTerrainMaterials();
     void CreateTerrainGO();
 
+    std::shared_ptr<Atmosphere::SkyAtmosphere> skyAtmosphere;
 
     /*
     Default functions

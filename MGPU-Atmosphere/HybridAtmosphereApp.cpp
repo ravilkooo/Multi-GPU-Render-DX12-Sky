@@ -296,7 +296,7 @@ void HybridAtmosphereApp::PopulateForwardPathCommands(const std::shared_ptr<GCom
         cmdList->SetPipelineState(*defaultPrimePipelineResources.GetPSO(RenderMode::Opaque));
         PopulateDrawCommands(cmdList, (RenderMode::Opaque));
 
-        cmdList->SetPipelineState(*mAtmosphereAppPSOs[RenderMode::Terrain]);
+        cmdList->SetPipelineState(*mCustomAppPSOs[RenderMode::Terrain]);
         PopulateDrawCommands(cmdList, RenderMode::Terrain);
 
         cmdList->SetPipelineState(*defaultPrimePipelineResources.GetPSO(RenderMode::OpaqueAlphaDrop));
@@ -390,6 +390,44 @@ void HybridAtmosphereApp::Draw(const GameTimer& gt)
         emitter->Dispatch(primeCmdList);
     }
 
+    {
+        skyAtmosphere->mShadowmapViewProjMat = shadowPassCB.ViewProj;
+        skyAtmosphere->mViewMat = camera->GetViewMatrix();
+        skyAtmosphere->mProjMat = camera->GetProjectionMatrix();
+        skyAtmosphere->mViewProjMat = skyAtmosphere->mViewMat * skyAtmosphere->mProjMat;
+        
+        Vector3 camPos = camera->gameObject->GetTransform()->GetWorldPosition();
+        skyAtmosphere->mCamPosFinal = camPos * 0.001f;
+        skyAtmosphere->mCamPosFinal.y = camPos.z * 0.001f;
+        skyAtmosphere->mCamPosFinal.z = camPos.y * 0.001f;
+
+        Vector3 forward = camera->gameObject->GetTransform()->GetForwardVector();
+        float viewPitchSin = forward.y;
+        float viewPitchCos_YawSin = forward.x;
+        float viewPitchCos_YawCos = forward.z;
+        float viewPitch = asinf(viewPitchSin);
+        float viewYaw = atan2f(viewPitchCos_YawSin, viewPitchCos_YawCos);
+        Vector3 _viewDir;
+        XMMATRIX BBB = XMMatrixRotationRollPitchYaw(-viewPitch, viewYaw, 0.0f);
+        XMStoreFloat3(&_viewDir, BBB.r[2]);
+        skyAtmosphere->mViewDir = _viewDir;
+        skyAtmosphere->mViewDir.x = -_viewDir.x;
+        skyAtmosphere->mViewDir.y = _viewDir.z;
+        skyAtmosphere->mViewDir.z = _viewDir.y;
+
+        Vector3 tmp = Vector3::Zero;
+        tmp.y = cos(XM_PIDIV4);
+        tmp.z = cos(XM_PIDIV4);
+        tmp = -tmp;
+        skyAtmosphere->mSunDir = tmp;
+        //skyAtmosphere->mSunDir.x = -tmp.x;
+        skyAtmosphere->mSunDir.x = -tmp.x;
+        skyAtmosphere->mSunDir.y = tmp.z;
+        skyAtmosphere->mSunDir.z = tmp.y;
+    }
+    skyAtmosphere->UpdateSkyAtmosphereBuffer();
+    skyAtmosphere->PopulateTransmittanceLutCommands(primeCmdList);
+
     PopulateNormalMapCommands(primeCmdList);
     PopulateAmbientMapCommands(primeCmdList);
     PopulateShadowMapCommands(primeCmdList);
@@ -431,6 +469,8 @@ bool HybridAtmosphereApp::Initialize()
     CreateCustomGO();
     SortGO();
     InitFrameResource();
+
+    skyAtmosphere = std::make_shared<Atmosphere::SkyAtmosphere>(primeDevice);
 
     OnResize();
 
@@ -1023,7 +1063,8 @@ void HybridAtmosphereApp::CreateGO()
 
     auto camera = std::make_unique<GameObject>("MainCamera");
     camera->GetTransform()->SetParent(rotater->GetTransform().get());
-    camera->GetTransform()->SetPosition(Vector3(-1000, 190, -32));
+    //camera->GetTransform()->SetPosition(Vector3(-1000, 190, -32));
+    camera->GetTransform()->SetPosition(Vector3(0, 10, 50));
     camera->GetTransform()->SetEulerRotate(Vector3(-30, 270, 0));
     camera->AddComponent(std::make_shared<Camera>(AspectRatio()));
     camera->GetComponent<Camera>()->SetFarZ(30000.0f);
@@ -1561,11 +1602,11 @@ LRESULT HybridAtmosphereApp::MsgProc(const HWND hwnd, const UINT msg, const WPAR
 
 void HybridAtmosphereApp::LoadCustomShaders()
 {
-    // mAtmosphereAppShaders = MemoryAllocator::CreateUnorderedMap<std::string, std::shared_ptr<GShader>>();
+    // mCustomAppShaders = MemoryAllocator::CreateUnorderedMap<std::string, std::shared_ptr<GShader>>();
 
     LoadTerrainShader();
 
-    for (auto&& pair : mAtmosphereAppShaders)
+    for (auto&& pair : mCustomAppShaders)
     {
         pair.second->LoadAndCompile();
     }
@@ -1575,12 +1616,12 @@ void HybridAtmosphereApp::LoadCustomPSOs(std::shared_ptr<GDevice> device, std::s
     D3D12_INPUT_LAYOUT_DESC defautlInputDesc, DXGI_FORMAT backBufferFormat,
     DXGI_FORMAT depthStencilFormat)
 {
-    // mAtmosphereAppPSOs = MemoryAllocator::CreateUnorderedMap<RenderMode, std::shared_ptr<GraphicPSO>>();
+    // mCustomAppPSOs = MemoryAllocator::CreateUnorderedMap<RenderMode, std::shared_ptr<GraphicPSO>>();
 
     LoadTerrainPSO(rootSignature,
         defautlInputDesc, backBufferFormat, depthStencilFormat);
 
-    for (auto& pso : mAtmosphereAppPSOs)
+    for (auto& pso : mCustomAppPSOs)
     {
         pso.second->Initialize(device);
     }
@@ -1609,17 +1650,17 @@ void HybridAtmosphereApp::LoadTerrainShader()
         "Shaders/Terrain"
     };
 
-    mAtmosphereAppShaders["TerrainVS"] = std::move(
+    mCustomAppShaders["TerrainVS"] = std::move(
         std::make_shared<GShaderCustomInclude>(2u, dirs,
             L"Shaders\\Terrain\\Terrain.hlsl", VertexShader, nullptr, "TerrainVS", "vs_5_1"));
 
     /*
-    mAtmosphereAppShaders["TerrainVS"] = std::move(
+    mCustomAppShaders["TerrainVS"] = std::move(
         std::make_shared<GShader>(L"Shaders\\Terrain\\Terrain.hlsl", VertexShader, nullptr, "TerrainVS", "vs_5_1"));
     */
 
     /*    
-    mAtmosphereAppShaders["TerrainPS"] = std::move(
+    mCustomAppShaders["TerrainPS"] = std::move(
         std::make_shared<GShader>(L"Shaders\\Terrain\\Terrain.hlsl", PixelShader, nullptr, "TerrainPS", "ps_5_1"));
     */
 }
@@ -1633,7 +1674,7 @@ void HybridAtmosphereApp::LoadTerrainPSO(std::shared_ptr<GRootSignature> rootSig
     ZeroMemory(&terrainPsoDesc, sizeof(D3D12_GRAPHICS_PIPELINE_STATE_DESC));
     terrainPsoDesc.InputLayout = defautlInputDesc;
     terrainPsoDesc.pRootSignature = rootSignature->GetNativeSignature().Get();
-    terrainPsoDesc.VS = mAtmosphereAppShaders["TerrainVS"]->GetShaderResource();
+    terrainPsoDesc.VS = mCustomAppShaders["TerrainVS"]->GetShaderResource();
     terrainPsoDesc.PS = defaultPrimePipelineResources.GetShader("OpaquePixel")->GetShaderResource();
     terrainPsoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
     terrainPsoDesc.RasterizerState.CullMode = D3D12_CULL_MODE_BACK;
@@ -1655,7 +1696,7 @@ void HybridAtmosphereApp::LoadTerrainPSO(std::shared_ptr<GRootSignature> rootSig
     depthStencilDesc = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
     terrainPSO->SetDepthStencilState(depthStencilDesc);
 
-    mAtmosphereAppPSOs[terrainPSO->GetRenderMode()] = std::move(terrainPSO);
+    mCustomAppPSOs[terrainPSO->GetRenderMode()] = std::move(terrainPSO);
 }
 
 void HybridAtmosphereApp::LoadTerrainTexture()
