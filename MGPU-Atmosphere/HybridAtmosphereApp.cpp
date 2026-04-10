@@ -462,14 +462,24 @@ void HybridAtmosphereApp::Draw(const GameTimer& gt)
             skyAtmosphere->mSunDir.y = tmp.z;
             skyAtmosphere->mSunDir.z = tmp.y;
 
+            {
+                Vector3 focusPosition = skyAtmosphere->mCamPosFinal + skyAtmosphere->mViewDir;
+                Vector3 eyePosition = skyAtmosphere->mCamPosFinal;
+                Vector3 upDirection = Vector3{ 0.0f, 0.0f, 1.0f };	// Unreal z-up
 
-            XMMATRIX viewMatrix = camera->GetViewMatrix();
-            XMMATRIX projMatrix = camera->GetProjectionMatrix();
-            XMMATRIX ViewProjMat = XMMatrixMultiply(viewMatrix, projMatrix);
+                skyAtmosphere->mViewMat = XMMatrixLookAtLH(eyePosition, focusPosition, upDirection);
+                //mProjMat = XMMatrixPerspectiveFovLH(66.6f * 3.14159f / 180.0f, aspectRatioXOverY, 0.1f, 20000.0f);
+                skyAtmosphere->mProjMat = camera->GetProjectionMatrix();
+
+                // skyAtmosphere->mViewMat = camera->GetViewMatrix();
+                // skyAtmosphere->mProjMat = camera->GetProjectionMatrix();
+                skyAtmosphere->mViewProjMat = skyAtmosphere->mViewMat * skyAtmosphere->mProjMat;
+            }
+            
             float mSunIlluminanceScale = 1.0f;
             int NumScatteringOrder = 4;
 
-            skyAtmosphere->mCommonConstanants.gViewProjMat = ViewProjMat;
+            skyAtmosphere->mCommonConstanants.gViewProjMat = skyAtmosphere->mViewProjMat;
             skyAtmosphere->mCommonConstanants.gColor = { 0.0, 1.0, 1.0, 1.0 };
             skyAtmosphere->mCommonConstanants.gResolution[0] = uint32_t(MainWindow->GetClientWidth());
             skyAtmosphere->mCommonConstanants.gResolution[1] = uint32_t(MainWindow->GetClientHeight());

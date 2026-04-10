@@ -590,7 +590,7 @@ void Atmosphere::SkyAtmosphere::PopulateRayMarchingCommands(const std::shared_pt
     if (!mRayMarchingResult || !mRayMarchingResult->GetD3D12Resource())
         return;
 
-    cmdList->StartMark(L"AerialPerspLUT");
+    cmdList->StartMark(L"RayMarchingLUT");
     // Set viewport/scissor to transmittance texture size
 
     // Transition resource to UAV and clear
