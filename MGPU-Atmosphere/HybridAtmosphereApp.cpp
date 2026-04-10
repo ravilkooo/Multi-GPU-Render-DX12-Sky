@@ -111,6 +111,7 @@ void HybridAtmosphereApp::Update(const GameTimer& gt)
 
 void HybridAtmosphereApp::PopulateShadowMapCommands(const std::shared_ptr<GCommandList>& cmdList)
 {
+    cmdList->StartMark(L"ShadowMapCommands");
     //cmdList->SetRootSignature(*primeDeviceSignature.get());
     cmdList->SetPipelineState(*defaultPrimePipelineResources.GetPSO(RenderMode::ShadowMapOpaque));
     cmdList->SetRootShaderResourceView(StandardShaderSlot::MaterialData,
@@ -127,10 +128,12 @@ void HybridAtmosphereApp::PopulateShadowMapCommands(const std::shared_ptr<GComma
 
     cmdList->TransitionBarrier(shadowPath->GetTexture(), D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
     cmdList->FlushResourceBarriers();
+    cmdList->EndMark();
 }
 
 void HybridAtmosphereApp::PopulateNormalMapCommands(const std::shared_ptr<GCommandList>& cmdList)
 {
+    cmdList->StartMark(L"NormalMapCommands");
     //Draw Normals
     {
         cmdList->SetPipelineState(*defaultPrimePipelineResources.GetPSO(RenderMode::DrawNormalsOpaque));
@@ -180,6 +183,7 @@ void HybridAtmosphereApp::PopulateNormalMapCommands(const std::shared_ptr<GComma
 
         cmdList->SetPipelineState(*defaultPrimePipelineResources.GetPSO(RenderMode::DrawNormalsOpaque));
         PopulateDrawCommands(cmdList, RenderMode::Opaque);
+        // 
         cmdList->SetPipelineState(*defaultPrimePipelineResources.GetPSO(RenderMode::DrawNormalsOpaqueDrop));
         PopulateDrawCommands(cmdList, RenderMode::OpaqueAlphaDrop);
 
@@ -188,6 +192,7 @@ void HybridAtmosphereApp::PopulateNormalMapCommands(const std::shared_ptr<GComma
         cmdList->TransitionBarrier(normalDepthMap, D3D12_RESOURCE_STATE_COMMON);
         cmdList->FlushResourceBarriers();
     }
+    cmdList->EndMark();
 }
 
 void HybridAtmosphereApp::PopulateAmbientMapCommands(const std::shared_ptr<GCommandList>& cmdList) const
@@ -258,6 +263,7 @@ void HybridAtmosphereApp::PopulateAmbientMapCommands(const std::shared_ptr<GComm
 
 void HybridAtmosphereApp::PopulateForwardPathCommands(const std::shared_ptr<GCommandList>& cmdList)
 {
+    cmdList->StartMark(L"ForwardPathCommands");
     //Forward Path with SSAA
     {
         cmdList->SetDescriptorsHeap(&srvTexturesMemory);
@@ -316,6 +322,7 @@ void HybridAtmosphereApp::PopulateForwardPathCommands(const std::shared_ptr<GCom
         cmdList->TransitionBarrier((antiAliasingPrimePath->GetDepthMap()), D3D12_RESOURCE_STATE_DEPTH_READ);
         cmdList->FlushResourceBarriers();
     }
+    cmdList->EndMark();
 }
 
 void HybridAtmosphereApp::PopulateDrawCommands(const std::shared_ptr<GCommandList>& cmdList,
@@ -390,77 +397,100 @@ void HybridAtmosphereApp::Draw(const GameTimer& gt)
         emitter->Dispatch(primeCmdList);
     }
 
-    {
-        skyAtmosphere->mShadowmapViewProjMat = shadowPassCB.ViewProj;
-        skyAtmosphere->mViewMat = camera->GetViewMatrix();
-        skyAtmosphere->mProjMat = camera->GetProjectionMatrix();
-        skyAtmosphere->mViewProjMat = skyAtmosphere->mViewMat * skyAtmosphere->mProjMat;
-        
-        Vector3 camPos = camera->gameObject->GetTransform()->GetWorldPosition();
-        skyAtmosphere->mCamPosFinal = camPos * 0.001f;
-        skyAtmosphere->mCamPosFinal.y = camPos.z * 0.001f;
-        skyAtmosphere->mCamPosFinal.z = camPos.y * 0.001f;
-
-        Vector3 forward = camera->gameObject->GetTransform()->GetForwardVector();
-        float viewPitchSin = forward.y;
-        float viewPitchCos_YawSin = forward.x;
-        float viewPitchCos_YawCos = forward.z;
-        float viewPitch = asinf(viewPitchSin);
-        float viewYaw = atan2f(viewPitchCos_YawSin, viewPitchCos_YawCos);
-        Vector3 _viewDir;
-        XMMATRIX BBB = XMMatrixRotationRollPitchYaw(-viewPitch, viewYaw, 0.0f);
-        XMStoreFloat3(&_viewDir, BBB.r[2]);
-        skyAtmosphere->mViewDir = _viewDir;
-        skyAtmosphere->mViewDir.x = -_viewDir.x;
-        skyAtmosphere->mViewDir.y = _viewDir.z;
-        skyAtmosphere->mViewDir.z = _viewDir.y;
-
-        /*
-        Vector3 tmp = Vector3::Zero;
-        tmp.y = cos(XM_PIDIV4);
-        tmp.z = cos(XM_PIDIV4);
-        tmp = -tmp;
-        skyAtmosphere->mSunDir = tmp;
-        */
-        //skyAtmosphere->mSunDir.x = -tmp.x;
-        /*
-        skyAtmosphere->mSunDir.x = 0.0f;
-        skyAtmosphere->mSunDir.y = 0.90045f;
-        skyAtmosphere->mSunDir.z = 0.43497f;
-        */
-        Vector3 tmp = mRotatedLightDirections[0];
-        tmp = -tmp;
-        skyAtmosphere->mSunDir = tmp;
-        //skyAtmosphere->mSunDir.x = -tmp.x;
-        skyAtmosphere->mSunDir.x = -tmp.x;
-        skyAtmosphere->mSunDir.y = tmp.z;
-        skyAtmosphere->mSunDir.z = tmp.y;
-
-
-        XMMATRIX viewMatrix = camera->GetViewMatrix();
-        XMMATRIX projMatrix = camera->GetProjectionMatrix();
-        XMMATRIX ViewProjMat = XMMatrixMultiply(viewMatrix, projMatrix);
-        float mSunIlluminanceScale = 1.0f;
-        int NumScatteringOrder = 4;
-
-        skyAtmosphere->mCommonConstanants.gViewProjMat = ViewProjMat;
-        skyAtmosphere->mCommonConstanants.gColor = { 0.0, 1.0, 1.0, 1.0 };
-        skyAtmosphere->mCommonConstanants.gResolution[0] = uint32_t(MainWindow->GetClientWidth());
-        skyAtmosphere->mCommonConstanants.gResolution[1] = uint32_t(MainWindow->GetClientHeight());
-        skyAtmosphere->mCommonConstanants.gSunIlluminance = { 1.0f * mSunIlluminanceScale, 1.0f * mSunIlluminanceScale, 1.0f * mSunIlluminanceScale };
-        skyAtmosphere->mCommonConstanants.gScatteringMaxPathDepth = NumScatteringOrder;
-        skyAtmosphere->mCommonConstanants.gFrameTimeSec = gt.DeltaTime();
-        skyAtmosphere->mCommonConstanants.gTimeSec = gt.TotalTime();
-        skyAtmosphere->mCommonConstanants.gFrameId = gFrameId;
-        skyAtmosphere->mCommonConstanants.gScreenshotCaptureActive = false; // Make sure the terrain or sundisk are not taken into account to focus on the most important part: atmosphere
-    }
-    skyAtmosphere->UpdateSkyAtmosphereBuffer();
-    skyAtmosphere->PopulateTransmittanceLutCommands(primeCmdList);
-    skyAtmosphere->PopulateMultiScatLutCommands(primeCmdList);
-    skyAtmosphere->PopulateSkyViewLutCommands(primeCmdList);
-    skyAtmosphere->PopulateAerialPerspectiveCommands(primeCmdList);
-
     PopulateNormalMapCommands(primeCmdList);
+
+    {
+        GTexture depthMap;
+        const GDescriptor* depthMapSrv;
+
+        if (IsUseHBAO)
+        {
+            const HBAOResources& Resources = hbaoPass->GetPrimeResources();
+            depthMap = Resources.GetDepthMap();
+            depthMapSrv = Resources.GetDepthMapSRV();
+        }
+        else
+        {
+            const SSAOResources& Resources = ssaoPass->GetPrimeResources();
+            depthMap = Resources.GetDepthMap();
+            depthMapSrv = Resources.GetDepthMapSRV();
+        }
+
+        {
+            skyAtmosphere->mShadowmapViewProjMat = shadowPassCB.ViewProj;
+            skyAtmosphere->mViewMat = camera->GetViewMatrix();
+            skyAtmosphere->mProjMat = camera->GetProjectionMatrix();
+            skyAtmosphere->mViewProjMat = skyAtmosphere->mViewMat * skyAtmosphere->mProjMat;
+
+            Vector3 camPos = camera->gameObject->GetTransform()->GetWorldPosition();
+            skyAtmosphere->mCamPosFinal = camPos * 0.001f;
+            skyAtmosphere->mCamPosFinal.y = camPos.z * 0.001f;
+            skyAtmosphere->mCamPosFinal.z = camPos.y * 0.001f;
+
+            Vector3 forward = camera->gameObject->GetTransform()->GetForwardVector();
+            float viewPitchSin = forward.y;
+            float viewPitchCos_YawSin = forward.x;
+            float viewPitchCos_YawCos = forward.z;
+            float viewPitch = asinf(viewPitchSin);
+            float viewYaw = atan2f(viewPitchCos_YawSin, viewPitchCos_YawCos);
+            Vector3 _viewDir;
+            XMMATRIX BBB = XMMatrixRotationRollPitchYaw(-viewPitch, viewYaw, 0.0f);
+            XMStoreFloat3(&_viewDir, BBB.r[2]);
+            skyAtmosphere->mViewDir = _viewDir;
+            skyAtmosphere->mViewDir.x = -_viewDir.x;
+            skyAtmosphere->mViewDir.y = _viewDir.z;
+            skyAtmosphere->mViewDir.z = _viewDir.y;
+
+            /*
+            Vector3 tmp = Vector3::Zero;
+            tmp.y = cos(XM_PIDIV4);
+            tmp.z = cos(XM_PIDIV4);
+            tmp = -tmp;
+            skyAtmosphere->mSunDir = tmp;
+            */
+            //skyAtmosphere->mSunDir.x = -tmp.x;
+            /*
+            skyAtmosphere->mSunDir.x = 0.0f;
+            skyAtmosphere->mSunDir.y = 0.90045f;
+            skyAtmosphere->mSunDir.z = 0.43497f;
+            */
+            Vector3 tmp = mRotatedLightDirections[0];
+            tmp = -tmp;
+            skyAtmosphere->mSunDir = tmp;
+            //skyAtmosphere->mSunDir.x = -tmp.x;
+            skyAtmosphere->mSunDir.x = -tmp.x;
+            skyAtmosphere->mSunDir.y = tmp.z;
+            skyAtmosphere->mSunDir.z = tmp.y;
+
+
+            XMMATRIX viewMatrix = camera->GetViewMatrix();
+            XMMATRIX projMatrix = camera->GetProjectionMatrix();
+            XMMATRIX ViewProjMat = XMMatrixMultiply(viewMatrix, projMatrix);
+            float mSunIlluminanceScale = 1.0f;
+            int NumScatteringOrder = 4;
+
+            skyAtmosphere->mCommonConstanants.gViewProjMat = ViewProjMat;
+            skyAtmosphere->mCommonConstanants.gColor = { 0.0, 1.0, 1.0, 1.0 };
+            skyAtmosphere->mCommonConstanants.gResolution[0] = uint32_t(MainWindow->GetClientWidth());
+            skyAtmosphere->mCommonConstanants.gResolution[1] = uint32_t(MainWindow->GetClientHeight());
+            skyAtmosphere->mCommonConstanants.gSunIlluminance = { 1.0f * mSunIlluminanceScale, 1.0f * mSunIlluminanceScale, 1.0f * mSunIlluminanceScale };
+            skyAtmosphere->mCommonConstanants.gScatteringMaxPathDepth = NumScatteringOrder;
+            skyAtmosphere->mCommonConstanants.gFrameTimeSec = gt.DeltaTime();
+            skyAtmosphere->mCommonConstanants.gTimeSec = gt.TotalTime();
+            skyAtmosphere->mCommonConstanants.gFrameId = gFrameId;
+            skyAtmosphere->mCommonConstanants.gScreenshotCaptureActive = false; // Make sure the terrain or sundisk are not taken into account to focus on the most important part: atmosphere
+        }
+        skyAtmosphere->UpdateSkyAtmosphereBuffer();
+        skyAtmosphere->PopulateTransmittanceLutCommands(primeCmdList);
+        skyAtmosphere->PopulateMultiScatLutCommands(primeCmdList);
+        skyAtmosphere->PopulateSkyViewLutCommands(primeCmdList);
+        skyAtmosphere->PopulateAerialPerspectiveCommands(primeCmdList);
+
+        primeCmdList->TransitionBarrier(depthMap, D3D12_RESOURCE_STATE_GENERIC_READ);
+        skyAtmosphere->PopulateRayMarchingCommands(primeCmdList, depthMapSrv);
+        primeCmdList->TransitionBarrier(depthMap, D3D12_RESOURCE_STATE_COMMON);
+    }
+
     PopulateAmbientMapCommands(primeCmdList);
     PopulateShadowMapCommands(primeCmdList);
     PopulateForwardPathCommands(primeCmdList);

@@ -281,8 +281,7 @@ float AerialPerspectiveSliceToDepth(float slice)
     return slice * AP_KM_PER_SLICE;
 }
 
-/*
-struct RayMarchPixelOutputStruct
+struct RayMarchOutputStruct
 {
     float4 Luminance : SV_TARGET0;
 #if COLORED_TRANSMITTANCE_ENABLED
@@ -290,14 +289,23 @@ struct RayMarchPixelOutputStruct
 #endif
 };
 
-RayMarchPixelOutputStruct RenderRayMarchingPS(SlicedVertexOut Input)
+[numthreads(32, 32, 1)]
+void ComputeRayMarchingCS(uint3 dispatchThreadId : SV_DispatchThreadID)
 {
-    RayMarchPixelOutputStruct output = (RayMarchPixelOutputStruct) 0;
+    RayMarchOutputStruct output = (RayMarchOutputStruct) 0;
 #if COLORED_TRANSMITTANCE_ENABLED
 	output.Transmittance = float4(0, 0, 0, 1);
 #endif
-
-    float2 pixPos = Input.PosH.xy;
+    
+    float2 pixPos = float2(dispatchThreadId.xy) + 0.5f;
+    float2 rayMarchRes = float2(1920.0f, 1080.0f);
+    
+    // Проверяем границы
+    if (dispatchThreadId.x >= rayMarchRes.x || dispatchThreadId.y >= rayMarchRes.y)
+    {
+        return;
+    }
+    
     AtmosphereParameters Atmosphere = GetAtmosphereParameters();
 
     float3 ClipSpace = float3((pixPos / float2(rayMarchingResolution)) * float2(2.0, -2.0) - float2(1.0, -1.0), 1.0);
@@ -336,7 +344,8 @@ RayMarchPixelOutputStruct RenderRayMarchingPS(SlicedVertexOut Input)
 
 		//output.Luminance = float4(SkyViewLutTexture.SampleLevel(samplerLinearClamp, pixPos / float2(rayMarchingResolution), 0).rgb + GetSunLuminance(WorldPos, WorldDir, Atmosphere.BottomRadius), 1.0);
 		output.Luminance = float4(SkyViewLutTexture.SampleLevel(samplerLinearClamp, uv, 0).rgb + GetSunLuminance(WorldPos, WorldDir, Atmosphere.BottomRadius), 1.0);
-		return output;
+		RayMarchingOut[dispatchThreadId.xy] = output.Luminance;
+        return;
 	}
 #else
     if (DepthBufferValue == 1.0f)
@@ -363,7 +372,7 @@ RayMarchPixelOutputStruct RenderRayMarchingPS(SlicedVertexOut Input)
 	}
 	float w = sqrt(Slice / AP_SLICE_COUNT);	// squared distribution
 
-	const float4 AP = Weight * AtmosphereCameraScatteringVolume.SampleLevel(samplerLinearClamp, float3(pixPos / float2(rayMarchingResolution), w), 0);
+	const float4 AP = Weight * AerialPerspectiveLutTexture.SampleLevel(samplerLinearClamp, float3(pixPos / float2(rayMarchingResolution), w), 0);
 	L.rgb += AP.rgb;
 	float Opacity = AP.a;
 
@@ -379,7 +388,8 @@ RayMarchPixelOutputStruct RenderRayMarchingPS(SlicedVertexOut Input)
     {
 		// Ray is not intersecting the atmosphere		
         output.Luminance = float4(GetSunLuminance(WorldPos, WorldDir, Atmosphere.BottomRadius), 1.0);
-        return output;
+        RayMarchingOut[dispatchThreadId.xy] = output.Luminance;
+        return;
     }
 
     const bool ground = false;
@@ -403,10 +413,9 @@ RayMarchPixelOutputStruct RenderRayMarchingPS(SlicedVertexOut Input)
 #endif // FASTAERIALPERSPECTIVE_ENABLED
 
     // output.Luminance.xyz = saturate(output.Luminance.xyz * 20);
-    return output;
+    RayMarchingOut[dispatchThreadId.xy] = output.Luminance;
+    return;
 }
-*/
-
 
 ////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////

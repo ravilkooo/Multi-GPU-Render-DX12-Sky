@@ -169,7 +169,8 @@ protected:
 
     float mLightRotationAngle = 0.0f;
     Vector3 mBaseLightDirections[3] = {
-        Vector3(0.57735f, -0.57735f, 0.57735f),
+        //Vector3(0.57735f, -0.57735f, 0.57735f),
+        Vector3(0.0f, -sin(0.45f), -cos(0.45f)),
         Vector3(-0.57735f, -0.57735f, 0.57735f),
         Vector3(0.0f, -0.707f, -0.707f)
     };

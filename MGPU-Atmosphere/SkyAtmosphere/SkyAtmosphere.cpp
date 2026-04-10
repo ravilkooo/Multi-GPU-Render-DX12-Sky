@@ -73,16 +73,19 @@ void Atmosphere::SkyAtmosphere::InitRootSignatures()
     CD3DX12_DESCRIPTOR_RANGE srvRange2;
     CD3DX12_DESCRIPTOR_RANGE srvRange3;
     CD3DX12_DESCRIPTOR_RANGE srvRange4;
+    CD3DX12_DESCRIPTOR_RANGE srvRange5;
     srvRange0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, (UINT)TextureSlots::Transmittance, 0); // t0 transmittance
     srvRange1.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, (UINT)TextureSlots::Multiscat, 0); // t1 multiscat
     srvRange2.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, (UINT)TextureSlots::SkyView, 0); // t2, skyview
     srvRange3.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, (UINT)TextureSlots::Aerial, 0); // t3, aerial
     srvRange4.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, (UINT)TextureSlots::Shadow, 0); // t4, shadow
+    srvRange5.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, (UINT)TextureSlots::Depth, 0); // t5, depth
     mRootSignature->AddDescriptorParameter(&srvRange0, 1);
     mRootSignature->AddDescriptorParameter(&srvRange1, 1);
     mRootSignature->AddDescriptorParameter(&srvRange2, 1);
     mRootSignature->AddDescriptorParameter(&srvRange3, 1);
     mRootSignature->AddDescriptorParameter(&srvRange4, 1);
+    mRootSignature->AddDescriptorParameter(&srvRange5, 1);
 
     CD3DX12_DESCRIPTOR_RANGE uavRange0;
     CD3DX12_DESCRIPTOR_RANGE uavRange1;
@@ -93,7 +96,7 @@ void Atmosphere::SkyAtmosphere::InitRootSignatures()
     uavRange1.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, (UINT)UavSlots::Multiscat, 0); // u1 multiscat output
     uavRange2.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, (UINT)UavSlots::SkyView, 0); // u2 skyview output
     uavRange3.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, (UINT)UavSlots::Aerial, 0); // u3 aerial output
-    uavRange4.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, (UINT)UavSlots::RaymMarching, 0); // u4 ray marching output
+    uavRange4.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, (UINT)UavSlots::RayMarching, 0); // u4 ray marching output
     mRootSignature->AddDescriptorParameter(&uavRange0, 1);
     mRootSignature->AddDescriptorParameter(&uavRange1, 1);
     mRootSignature->AddDescriptorParameter(&uavRange2, 1);
@@ -185,6 +188,18 @@ void Atmosphere::SkyAtmosphere::LoadShaders()
     
     mAtmosphereShaders["aerialPerspCS"] = std::move(
         std::make_shared<GShader>(L"Shaders\\SkyAtmosphere\\ComputeSkyRayMarching.hlsl", ComputeShader, multiScatEnabledDefines, "ComputeCameraVolumeCS", "cs_5_1"));
+    
+    constexpr D3D_SHADER_MACRO rayMarchingDefines[] =
+    {
+        "MULTISCATAPPROX_ENABLED", "1",
+        "FASTSKY_ENABLED", "1",
+        "COLORED_TRANSMITTANCE_ENABLED", "0",
+        "FASTAERIALPERSPECTIVE_ENABLED", "1",
+        "SHADOWMAP_ENABLED", "0",
+        nullptr, nullptr
+    };
+    mAtmosphereShaders["rayMarchCS"] = std::move(
+        std::make_shared<GShader>(L"Shaders\\SkyAtmosphere\\ComputeSkyRayMarching.hlsl", ComputeShader, rayMarchingDefines, "ComputeRayMarchingCS", "cs_5_1"));
 
     for (auto&& pair : mAtmosphereShaders)
     {
@@ -218,6 +233,12 @@ void Atmosphere::SkyAtmosphere::InitPSOs()
 
     mAtmospherePSOs["aerial"] = std::move(aerialPSO);
 
+    auto rayMarchPSO = std::make_shared<ComputePSO>();
+    rayMarchPSO->SetShader(mAtmosphereShaders["rayMarchCS"].get());
+    rayMarchPSO->SetRootSignature(*mRootSignature);
+
+    mAtmospherePSOs["raymarch"] = std::move(rayMarchPSO);
+
     for (auto& pso : mAtmospherePSOs)
     {
         pso.second->Initialize(mDevice);
@@ -230,6 +251,7 @@ void Atmosphere::SkyAtmosphere::LoadResources()
     LoadMultiScatLutResource();
     LoadSkyViewLutResource();
     LoadAerialPerpspectiveLutResource();
+    LoadRayMarchingResource();
 }
 
 void Atmosphere::SkyAtmosphere::LoadTransmittanceLutResource()
@@ -392,6 +414,45 @@ void Atmosphere::SkyAtmosphere::LoadAerialPerpspectiveLutResource()
     mAerialPerpspectiveLut->CreateShaderResourceView(&srvDesc, &mAerialPerpspectiveLutSRV);
 }
 
+void Atmosphere::SkyAtmosphere::LoadRayMarchingResource()
+{
+    // Create simple RayMarching (2D) as a starting point. Sizes chosen to match UE sample sizes.
+    D3D12_RESOURCE_DESC raymarchDesc = {};
+    ZeroMemory(&raymarchDesc, sizeof(D3D12_RESOURCE_DESC));
+    raymarchDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+    raymarchDesc.Alignment = 0;
+    raymarchDesc.DepthOrArraySize = 1;
+    raymarchDesc.MipLevels = 1;
+    raymarchDesc.SampleDesc.Count = 1;
+    raymarchDesc.SampleDesc.Quality = 0;
+    raymarchDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+    raymarchDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+    raymarchDesc.Width = 1920;
+    raymarchDesc.Height = 1080;
+    raymarchDesc.Format = DXGI_FORMAT_R32G32B32A32_FLOAT; // RayMarching format
+
+    mRayMarchingResult = std::make_shared<GTexture>(mDevice, raymarchDesc, L"RayMarching", TextureUsage::Normalmap);
+
+    mRayMarchingResultUAV = mDevice->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 1);
+    mRayMarchingResultSRV = mDevice->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 1);
+
+    D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc;
+    uavDesc.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;  // RayMarching format
+    uavDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
+    uavDesc.Texture2D.PlaneSlice = 0;
+    uavDesc.Texture2D.MipSlice = 0;
+    mRayMarchingResult->CreateUnorderedAccessView(&uavDesc, &mRayMarchingResultUAV);
+
+    D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc;
+    srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+    srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+    srvDesc.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;  // RayMarching format
+    srvDesc.Texture2D.MostDetailedMip = 0;
+    srvDesc.Texture2D.MipLevels = 1;
+    srvDesc.Texture2D.PlaneSlice = 0;
+    mRayMarchingResult->CreateShaderResourceView(&srvDesc, &mRayMarchingResultSRV);
+}
+
 void Atmosphere::SkyAtmosphere::PopulateTransmittanceLutCommands(const std::shared_ptr<GCommandList>& cmdList)
 {
     if (!mTransmittanceLut || !mTransmittanceLut->GetD3D12Resource())
@@ -524,6 +585,43 @@ void Atmosphere::SkyAtmosphere::PopulateAerialPerspectiveCommands(const std::sha
     cmdList->EndMark();
 }
 
+void Atmosphere::SkyAtmosphere::PopulateRayMarchingCommands(const std::shared_ptr<GCommandList>& cmdList, const GDescriptor* depthSRV)
+{
+    if (!mRayMarchingResult || !mRayMarchingResult->GetD3D12Resource())
+        return;
+
+    cmdList->StartMark(L"AerialPerspLUT");
+    // Set viewport/scissor to transmittance texture size
+
+    // Transition resource to UAV and clear
+    // cmdList->TransitionBarrier(*mTransmittanceLut, D3D12_RESOURCE_STATE_GENERIC_READ);
+    // cmdList->TransitionBarrier(*mMultiScatLut, D3D12_RESOURCE_STATE_GENERIC_READ);
+    cmdList->TransitionBarrier(*mAerialPerpspectiveLut, D3D12_RESOURCE_STATE_GENERIC_READ);
+    cmdList->TransitionBarrier(*mRayMarchingResult, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    cmdList->FlushResourceBarriers();
+
+    // cmdList->SetComputeRootSignature(*mRootSignature);
+    cmdList->SetPipelineState(*mAtmospherePSOs["raymarch"]);
+
+    cmdList->SetComputeRootDescriptorTable((UINT)CBSlots::Count + (UINT)TextureSlots::Aerial, &mAerialPerpspectiveLutSRV);
+    cmdList->SetComputeRootDescriptorTable((UINT)CBSlots::Count + (UINT)TextureSlots::Depth, depthSRV);
+
+    cmdList->SetComputeRootDescriptorTable((UINT)CBSlots::Count + (UINT)TextureSlots::Count + (UINT)UavSlots::RayMarching,
+        &mRayMarchingResultUAV);
+
+    // cmdList->SetComputeRootDescriptorTable(5, &mTransmittanceLutSRV);
+
+    auto IntDivRoundUp = [](UINT a, UINT b) { return (a + b - 1) / b; };
+
+    auto tgx = IntDivRoundUp(1920, 32);
+    auto tgy = IntDivRoundUp(1080, 32);
+    cmdList->Dispatch(tgx, tgy, 1);
+
+    cmdList->TransitionBarrier(*mRayMarchingResult, D3D12_RESOURCE_STATE_COMMON);
+    cmdList->FlushResourceBarriers();
+    cmdList->EndMark();
+}
+
 void Atmosphere::SkyAtmosphere::UpdateSkyAtmosphereBuffer()
 {
     // Populate AtmosphereCB with sensible defaults / current values and upload to GPU
@@ -598,8 +696,8 @@ void Atmosphere::SkyAtmosphere::UpdateSkyAtmosphereBuffer()
     mCommonConstanants.gRayMarchingResolution[0] = 1920;
     mCommonConstanants.gRayMarchingResolution[1] = 1080;
 
-    mCommonConstanants.gCameraVolumeResolution[0] = 1920;
-    mCommonConstanants.gCameraVolumeResolution[1] = 1080;
+    mCommonConstanants.gCameraVolumeResolution[0] = 32;
+    mCommonConstanants.gCameraVolumeResolution[1] = 32;
 
     viewRayMarchMaxSPP = viewRayMarchMinSPP >= viewRayMarchMaxSPP ? viewRayMarchMinSPP + 1 : viewRayMarchMaxSPP;
     mCommonConstanants.RayMarchMinMaxSPP[0] = float(viewRayMarchMinSPP);

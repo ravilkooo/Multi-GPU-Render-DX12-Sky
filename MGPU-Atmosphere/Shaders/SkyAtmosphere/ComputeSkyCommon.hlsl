@@ -31,6 +31,7 @@ Texture2D<float4> MultiScatTexture : register(t1, space0);
 Texture2D<float4> SkyViewLutTexture : register(t2, space0);
 Texture3D<float4> AerialPerspectiveLutTexture : register(t3, space0);
 Texture2D<float4> ShadowmapTexture : register(t4, space0);
+Texture2D<float4> ViewDepthTexture : register(t5, space0);
 
 RWTexture2D<float4> TransmittanceLutOut : register(u0, space0);
 RWTexture2D<float4> MultiScatOut : register(u1, space0);

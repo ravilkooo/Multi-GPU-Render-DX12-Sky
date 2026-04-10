@@ -192,6 +192,10 @@ namespace Atmosphere
         GDescriptor mAerialPerpspectiveLutUAV;
         GDescriptor mAerialPerpspectiveLutSRV;
 
+        std::shared_ptr<GTexture> mRayMarchingResult;
+        GDescriptor mRayMarchingResultUAV;
+        GDescriptor mRayMarchingResultSRV;
+
         AtmosphereInfo mAtmosphereInfos;
         LookUpTablesInfo mLutInfos;
 
@@ -203,11 +207,11 @@ namespace Atmosphere
         };
 
         enum class TextureSlots : UINT {
-            Transmittance = 0u, Multiscat, SkyView, Aerial, Shadow, Count
+            Transmittance = 0u, Multiscat, SkyView, Aerial, Shadow, Depth, Count
         };
 
         enum class UavSlots : UINT {
-            Transmittance = 0u, Multiscat, SkyView, Aerial, RaymMarching, Count
+            Transmittance = 0u, Multiscat, SkyView, Aerial, RayMarching, Count
         };
 
     public:
@@ -239,6 +243,7 @@ namespace Atmosphere
         void LoadMultiScatLutResource();
         void LoadSkyViewLutResource();
         void LoadAerialPerpspectiveLutResource();
+        void LoadRayMarchingResource();
 
         void UpdateSkyAtmosphereBuffer();
 
@@ -255,8 +260,8 @@ namespace Atmosphere
         void PopulateMultiScatLutCommands(const std::shared_ptr<GCommandList>& cmdList);
         void PopulateSkyViewLutCommands(const std::shared_ptr<GCommandList>& cmdList);
         void PopulateAerialPerspectiveCommands(const std::shared_ptr<GCommandList>& cmdList);
+        void PopulateRayMarchingCommands(const std::shared_ptr<GCommandList>& cmdList, const GDescriptor* depthSRV);
         /*
-        void PopulateRayMarchingCommands(const std::shared_ptr<GCommandList>& cmdList);
         */
     };
 
