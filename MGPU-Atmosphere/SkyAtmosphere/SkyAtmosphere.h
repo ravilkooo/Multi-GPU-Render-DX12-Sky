@@ -188,6 +188,10 @@ namespace Atmosphere
         GDescriptor mSkyViewLutUAV;
         GDescriptor mSkyViewLutSRV;
 
+        std::shared_ptr<GTexture> mAerialPerpspectiveLut;
+        GDescriptor mAerialPerpspectiveLutUAV;
+        GDescriptor mAerialPerpspectiveLutSRV;
+
         AtmosphereInfo mAtmosphereInfos;
         LookUpTablesInfo mLutInfos;
 
@@ -230,10 +234,11 @@ namespace Atmosphere
 
         void InitPSOs();
 
+        void LoadResources();
         void LoadTransmittanceLutResource();
         void LoadMultiScatLutResource();
         void LoadSkyViewLutResource();
-        void LoadResources();
+        void LoadAerialPerpspectiveLutResource();
 
         void UpdateSkyAtmosphereBuffer();
 
@@ -249,8 +254,8 @@ namespace Atmosphere
         void PopulateTransmittanceLutCommands(const std::shared_ptr<GCommandList>& cmdList);
         void PopulateMultiScatLutCommands(const std::shared_ptr<GCommandList>& cmdList);
         void PopulateSkyViewLutCommands(const std::shared_ptr<GCommandList>& cmdList);
-        /*
         void PopulateAerialPerspectiveCommands(const std::shared_ptr<GCommandList>& cmdList);
+        /*
         void PopulateRayMarchingCommands(const std::shared_ptr<GCommandList>& cmdList);
         */
     };

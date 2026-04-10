@@ -660,8 +660,8 @@ void ComputeSkyViewLutCS(uint3 dispatchThreadId : SV_DispatchThreadID)
 
 // CameraVolume
 
-[numthreads(16, 16, 32)]
-void ComputeCameraVolumePS(uint3 dispatchThreadId : SV_DispatchThreadID)
+[numthreads(32, 32, 1)]
+void ComputeCameraVolumeCS(uint3 dispatchThreadId : SV_DispatchThreadID)
 {
     float2 pixPos = float2(dispatchThreadId.xy) + 0.5f;
     float sliceId = dispatchThreadId.z;

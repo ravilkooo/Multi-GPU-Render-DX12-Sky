@@ -458,6 +458,7 @@ void HybridAtmosphereApp::Draw(const GameTimer& gt)
     skyAtmosphere->PopulateTransmittanceLutCommands(primeCmdList);
     skyAtmosphere->PopulateMultiScatLutCommands(primeCmdList);
     skyAtmosphere->PopulateSkyViewLutCommands(primeCmdList);
+    skyAtmosphere->PopulateAerialPerspectiveCommands(primeCmdList);
 
     PopulateNormalMapCommands(primeCmdList);
     PopulateAmbientMapCommands(primeCmdList);

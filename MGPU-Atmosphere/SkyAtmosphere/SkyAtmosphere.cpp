@@ -175,13 +175,16 @@ void Atmosphere::SkyAtmosphere::LoadShaders()
     mAtmosphereShaders["skyViewLutCS_ms_disabled"] = std::move(
         std::make_shared<GShader>(L"Shaders\\SkyAtmosphere\\ComputeSkyRayMarching.hlsl", ComputeShader, nullptr, "ComputeSkyViewLutCS", "cs_5_1"));
 
-    constexpr D3D_SHADER_MACRO multiScatSkyViewDefines[] =
+    constexpr D3D_SHADER_MACRO multiScatEnabledDefines[] =
     {
         "MULTISCATAPPROX_ENABLED", "1",
         nullptr, nullptr
     };
     mAtmosphereShaders["skyViewLutCS"] = std::move(
-        std::make_shared<GShader>(L"Shaders\\SkyAtmosphere\\ComputeSkyRayMarching.hlsl", ComputeShader, multiScatSkyViewDefines, "ComputeSkyViewLutCS", "cs_5_1"));
+        std::make_shared<GShader>(L"Shaders\\SkyAtmosphere\\ComputeSkyRayMarching.hlsl", ComputeShader, multiScatEnabledDefines, "ComputeSkyViewLutCS", "cs_5_1"));
+    
+    mAtmosphereShaders["aerialPerspCS"] = std::move(
+        std::make_shared<GShader>(L"Shaders\\SkyAtmosphere\\ComputeSkyRayMarching.hlsl", ComputeShader, multiScatEnabledDefines, "ComputeCameraVolumeCS", "cs_5_1"));
 
     for (auto&& pair : mAtmosphereShaders)
     {
@@ -209,6 +212,12 @@ void Atmosphere::SkyAtmosphere::InitPSOs()
 
     mAtmospherePSOs["skyview"] = std::move(skyviewPSO);
 
+    auto aerialPSO = std::make_shared<ComputePSO>();
+    aerialPSO->SetShader(mAtmosphereShaders["aerialPerspCS"].get());
+    aerialPSO->SetRootSignature(*mRootSignature);
+
+    mAtmospherePSOs["aerial"] = std::move(aerialPSO);
+
     for (auto& pso : mAtmospherePSOs)
     {
         pso.second->Initialize(mDevice);
@@ -220,6 +229,7 @@ void Atmosphere::SkyAtmosphere::LoadResources()
     LoadTransmittanceLutResource();
     LoadMultiScatLutResource();
     LoadSkyViewLutResource();
+    LoadAerialPerpspectiveLutResource();
 }
 
 void Atmosphere::SkyAtmosphere::LoadTransmittanceLutResource()
@@ -304,7 +314,7 @@ void Atmosphere::SkyAtmosphere::LoadMultiScatLutResource()
 
 void Atmosphere::SkyAtmosphere::LoadSkyViewLutResource()
 {
-    // Create simple MultiScat LUT (2D) as a starting point. Sizes chosen to match UE sample sizes.
+    // Create simple SkyView LUT (2D) as a starting point. Sizes chosen to match UE sample sizes.
     D3D12_RESOURCE_DESC skyviewDesc = {};
     ZeroMemory(&skyviewDesc, sizeof(D3D12_RESOURCE_DESC));
     skyviewDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
@@ -317,7 +327,7 @@ void Atmosphere::SkyAtmosphere::LoadSkyViewLutResource()
     skyviewDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
     skyviewDesc.Width = 192; // SKYVIEW_TEXTURE_WIDTH
     skyviewDesc.Height = 108; // SKYVIEW_TEXTURE_HEIGHT
-    skyviewDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT; // MultiScat LUT format
+    skyviewDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT; // SkyView LUT format
 
     mSkyViewLut = std::make_shared<GTexture>(mDevice, skyviewDesc, L"SkyViewLut", TextureUsage::Normalmap);
 
@@ -325,7 +335,7 @@ void Atmosphere::SkyAtmosphere::LoadSkyViewLutResource()
     mSkyViewLutSRV = mDevice->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 1);
 
     D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc;
-    uavDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;  // MultiScat LUT format
+    uavDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;  // SkyView LUT format
     uavDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
     uavDesc.Texture2D.PlaneSlice = 0;
     uavDesc.Texture2D.MipSlice = 0;
@@ -334,11 +344,52 @@ void Atmosphere::SkyAtmosphere::LoadSkyViewLutResource()
     D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc;
     srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
     srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-    srvDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;  // MultiScat LUT format
+    srvDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;  // SkyView LUT format
     srvDesc.Texture2D.MostDetailedMip = 0;
     srvDesc.Texture2D.MipLevels = 1;
     srvDesc.Texture2D.PlaneSlice = 0;
     mSkyViewLut->CreateShaderResourceView(&srvDesc, &mSkyViewLutSRV);
+}
+
+void Atmosphere::SkyAtmosphere::LoadAerialPerpspectiveLutResource()
+{
+    const UINT volumeRes = 32; // 32x32x32
+
+    // Create simple Aerial Persp LUT (2D) as a starting point. Sizes chosen to match UE sample sizes.
+    D3D12_RESOURCE_DESC aerialPerspDesc = {};
+    ZeroMemory(&aerialPerspDesc, sizeof(D3D12_RESOURCE_DESC));
+    aerialPerspDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE3D;
+    aerialPerspDesc.Width = volumeRes;
+    aerialPerspDesc.Height = volumeRes;
+    aerialPerspDesc.DepthOrArraySize = static_cast<UINT16>(volumeRes);
+    aerialPerspDesc.Alignment = 0;
+    aerialPerspDesc.MipLevels = 1;
+    aerialPerspDesc.SampleDesc.Count = 1;
+    aerialPerspDesc.SampleDesc.Quality = 0;
+    aerialPerspDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+    aerialPerspDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+    aerialPerspDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT; // Aerial Persp LUT format
+
+    mAerialPerpspectiveLut = std::make_shared<GTexture>(mDevice, aerialPerspDesc, L"AerialPerspLut", TextureUsage::Normalmap);
+
+    mAerialPerpspectiveLutUAV = mDevice->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 1);
+    mAerialPerpspectiveLutSRV = mDevice->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 1);
+
+    D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc;
+    uavDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;  // Aerial Persp LUT format
+    uavDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE3D;
+    uavDesc.Texture3D.FirstWSlice = 0;
+    uavDesc.Texture3D.MipSlice = 0;
+    uavDesc.Texture3D.WSize = volumeRes;
+    mAerialPerpspectiveLut->CreateUnorderedAccessView(&uavDesc, &mAerialPerpspectiveLutUAV);
+
+    D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc;
+    srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+    srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE3D;
+    srvDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;  // Aerial Persp LUT format
+    srvDesc.Texture3D.MostDetailedMip = 0;
+    srvDesc.Texture3D.MipLevels = 1;
+    mAerialPerpspectiveLut->CreateShaderResourceView(&srvDesc, &mAerialPerpspectiveLutSRV);
 }
 
 void Atmosphere::SkyAtmosphere::PopulateTransmittanceLutCommands(const std::shared_ptr<GCommandList>& cmdList)
@@ -431,7 +482,44 @@ void Atmosphere::SkyAtmosphere::PopulateSkyViewLutCommands(const std::shared_ptr
     auto tgy = IntDivRoundUp(108, 32);
     cmdList->Dispatch(tgx, tgy, 1);
 
-    cmdList->TransitionBarrier(*mSkyViewLut, D3D12_RESOURCE_STATE_COMMON);
+    // cmdList->TransitionBarrier(*mSkyViewLut, D3D12_RESOURCE_STATE_COMMON);
+    cmdList->FlushResourceBarriers();
+    cmdList->EndMark();
+}
+
+void Atmosphere::SkyAtmosphere::PopulateAerialPerspectiveCommands(const std::shared_ptr<GCommandList>& cmdList)
+{
+    if (!mAerialPerpspectiveLut || !mAerialPerpspectiveLut->GetD3D12Resource())
+        return;
+
+    cmdList->StartMark(L"AerialPerspLUT");
+    // Set viewport/scissor to transmittance texture size
+
+    // Transition resource to UAV and clear
+    // cmdList->TransitionBarrier(*mTransmittanceLut, D3D12_RESOURCE_STATE_GENERIC_READ);
+    // cmdList->TransitionBarrier(*mMultiScatLut, D3D12_RESOURCE_STATE_GENERIC_READ);
+    cmdList->TransitionBarrier(*mSkyViewLut, D3D12_RESOURCE_STATE_GENERIC_READ);
+    cmdList->TransitionBarrier(*mAerialPerpspectiveLut, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    cmdList->FlushResourceBarriers();
+
+    // cmdList->SetComputeRootSignature(*mRootSignature);
+    cmdList->SetPipelineState(*mAtmospherePSOs["aerial"]);
+
+    cmdList->SetComputeRootDescriptorTable((UINT)CBSlots::Count + (UINT)TextureSlots::SkyView, &mSkyViewLutSRV);
+
+    cmdList->SetComputeRootDescriptorTable((UINT)CBSlots::Count + (UINT)TextureSlots::Count + (UINT)UavSlots::Aerial,
+        &mAerialPerpspectiveLutUAV);
+
+    // cmdList->SetComputeRootDescriptorTable(5, &mTransmittanceLutSRV);
+
+    auto IntDivRoundUp = [](UINT a, UINT b) { return (a + b - 1) / b; };
+
+    auto tgx = IntDivRoundUp(32, 32);
+    auto tgy = IntDivRoundUp(32, 32);
+    auto tgz = IntDivRoundUp(32, 1);
+    cmdList->Dispatch(tgx, tgy, tgz);
+
+    cmdList->TransitionBarrier(*mAerialPerpspectiveLut, D3D12_RESOURCE_STATE_COMMON);
     cmdList->FlushResourceBarriers();
     cmdList->EndMark();
 }
