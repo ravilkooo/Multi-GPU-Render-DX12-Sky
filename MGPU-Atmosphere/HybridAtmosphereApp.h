@@ -62,6 +62,7 @@ protected:
     void CreateTerrainGO();
 
     std::shared_ptr<Atmosphere::SkyAtmosphere> skyAtmosphere;
+    unsigned int gFrameId;
 
     /*
     Default functions

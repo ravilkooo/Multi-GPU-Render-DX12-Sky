@@ -1,4 +1,5 @@
 #include "SkyAtmosphere.h"
+#include <string>
 
 Atmosphere::SkyAtmosphere::SkyAtmosphere(const std::shared_ptr<GDevice>& device)
 {
@@ -162,6 +163,17 @@ void Atmosphere::SkyAtmosphere::LoadShaders()
     mAtmosphereShaders["multiscatCS"] = std::move(
         std::make_shared<GShader>(L"Shaders\\SkyAtmosphere\\ComputeSkyRayMarching.hlsl", ComputeShader, nullptr, "ComputeMultiScattCS", "cs_5_1"));
 
+    mAtmosphereShaders["skyViewLutCS_ms_disabled"] = std::move(
+        std::make_shared<GShader>(L"Shaders\\SkyAtmosphere\\ComputeSkyRayMarching.hlsl", ComputeShader, nullptr, "ComputeSkyViewLutCS", "cs_5_1"));
+
+    constexpr D3D_SHADER_MACRO multiScatSkyViewDefines[] =
+    {
+        "MULTISCATAPPROX_ENABLED", "1",
+        nullptr, nullptr
+    };
+    mAtmosphereShaders["skyViewLutCS"] = std::move(
+        std::make_shared<GShader>(L"Shaders\\SkyAtmosphere\\ComputeSkyRayMarching.hlsl", ComputeShader, multiScatSkyViewDefines, "ComputeSkyViewLutCS", "cs_5_1"));
+
     for (auto&& pair : mAtmosphereShaders)
     {
         pair.second->LoadAndCompile();
@@ -182,6 +194,12 @@ void Atmosphere::SkyAtmosphere::InitPSOs()
 
     mAtmospherePSOs["multiscat"] = std::move(multiscatPSO);
 
+    auto skyviewPSO = std::make_shared<ComputePSO>();
+    skyviewPSO->SetShader(mAtmosphereShaders["skyViewLutCS"].get());
+    skyviewPSO->SetRootSignature(*mRootSignature);
+
+    mAtmospherePSOs["skyview"] = std::move(skyviewPSO);
+
     for (auto& pso : mAtmospherePSOs)
     {
         pso.second->Initialize(mDevice);
@@ -192,6 +210,7 @@ void Atmosphere::SkyAtmosphere::LoadResources()
 {
     LoadTransmittanceLutResource();
     LoadMultiScatLutResource();
+    LoadSkyViewLutResource();
 }
 
 void Atmosphere::SkyAtmosphere::LoadTransmittanceLutResource()
@@ -274,6 +293,45 @@ void Atmosphere::SkyAtmosphere::LoadMultiScatLutResource()
     mMultiScatLut->CreateShaderResourceView(&srvDesc, &mMultiScatLutSRV);
 }
 
+void Atmosphere::SkyAtmosphere::LoadSkyViewLutResource()
+{
+    // Create simple MultiScat LUT (2D) as a starting point. Sizes chosen to match UE sample sizes.
+    D3D12_RESOURCE_DESC skyviewDesc = {};
+    ZeroMemory(&skyviewDesc, sizeof(D3D12_RESOURCE_DESC));
+    skyviewDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+    skyviewDesc.Alignment = 0;
+    skyviewDesc.DepthOrArraySize = 1;
+    skyviewDesc.MipLevels = 1;
+    skyviewDesc.SampleDesc.Count = 1;
+    skyviewDesc.SampleDesc.Quality = 0;
+    skyviewDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+    skyviewDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+    skyviewDesc.Width = 192; // SKYVIEW_TEXTURE_WIDTH
+    skyviewDesc.Height = 108; // SKYVIEW_TEXTURE_HEIGHT
+    skyviewDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT; // MultiScat LUT format
+
+    mSkyViewLut = std::make_shared<GTexture>(mDevice, skyviewDesc, L"SkyViewLut", TextureUsage::Normalmap);
+
+    mSkyViewLutUAV = mDevice->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 1);
+    mSkyViewLutSRV = mDevice->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 1);
+
+    D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc;
+    uavDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;  // MultiScat LUT format
+    uavDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
+    uavDesc.Texture2D.PlaneSlice = 0;
+    uavDesc.Texture2D.MipSlice = 0;
+    mSkyViewLut->CreateUnorderedAccessView(&uavDesc, &mSkyViewLutUAV);
+
+    D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc;
+    srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+    srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+    srvDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;  // MultiScat LUT format
+    srvDesc.Texture2D.MostDetailedMip = 0;
+    srvDesc.Texture2D.MipLevels = 1;
+    srvDesc.Texture2D.PlaneSlice = 0;
+    mSkyViewLut->CreateShaderResourceView(&srvDesc, &mSkyViewLutSRV);
+}
+
 void Atmosphere::SkyAtmosphere::PopulateTransmittanceLutCommands(const std::shared_ptr<GCommandList>& cmdList)
 {
     if (!mTransmittanceLut || !mTransmittanceLut->GetD3D12Resource())
@@ -324,20 +382,45 @@ void Atmosphere::SkyAtmosphere::PopulateMultiScatLutCommands(const std::shared_p
     // cmdList->SetComputeRootSignature(*mRootSignature);
     cmdList->SetPipelineState(*mAtmospherePSOs["multiscat"]);
     
-    /*
-    if (mCommonCB)
-        cmdList->SetComputeRootConstantBufferView(0, *mCommonCB);
-    if (mAtmosphereCB)
-        cmdList->SetComputeRootConstantBufferView(1, *mAtmosphereCB);
-    */
-    
     cmdList->SetComputeRootDescriptorTable(3, &mMultiScatLutUAV);
     cmdList->SetComputeRootDescriptorTable(5, &mTransmittanceLutSRV);
 
     const UINT MultiScatteringLUTRes = 32;
     cmdList->Dispatch(MultiScatteringLUTRes, MultiScatteringLUTRes, 1);
 
-    cmdList->TransitionBarrier(*mMultiScatLut, D3D12_RESOURCE_STATE_COMMON);
+    // cmdList->TransitionBarrier(*mMultiScatLut, D3D12_RESOURCE_STATE_COMMON);
+    cmdList->FlushResourceBarriers();
+    cmdList->EndMark();
+}
+
+void Atmosphere::SkyAtmosphere::PopulateSkyViewLutCommands(const std::shared_ptr<GCommandList>& cmdList)
+{
+    if (!mSkyViewLut || !mSkyViewLut->GetD3D12Resource())
+        return;
+
+    cmdList->StartMark(L"SkyViewLUT");
+    // Set viewport/scissor to transmittance texture size
+
+    // Transition resource to UAV and clear
+    cmdList->TransitionBarrier(*mTransmittanceLut, D3D12_RESOURCE_STATE_GENERIC_READ);
+    cmdList->TransitionBarrier(*mMultiScatLut, D3D12_RESOURCE_STATE_GENERIC_READ);
+    cmdList->TransitionBarrier(*mSkyViewLut, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    cmdList->FlushResourceBarriers();
+
+    // cmdList->SetComputeRootSignature(*mRootSignature);
+    cmdList->SetPipelineState(*mAtmospherePSOs["skyview"]);
+
+    cmdList->SetComputeRootDescriptorTable(4, &mSkyViewLutUAV);
+    cmdList->SetComputeRootDescriptorTable(5, &mTransmittanceLutSRV);
+    cmdList->SetComputeRootDescriptorTable(6, &mMultiScatLutSRV);
+
+    auto IntDivRoundUp = [](UINT a, UINT b) { return (a + b - 1) / b; };
+
+    auto tgx = IntDivRoundUp(192, 32);
+    auto tgy = IntDivRoundUp(108, 32);
+    cmdList->Dispatch(tgx, tgy, 1);
+
+    cmdList->TransitionBarrier(*mSkyViewLut, D3D12_RESOURCE_STATE_COMMON);
     cmdList->FlushResourceBarriers();
     cmdList->EndMark();
 }
@@ -409,6 +492,19 @@ void Atmosphere::SkyAtmosphere::UpdateSkyAtmosphereBuffer()
 
     if (mAtmosphereCB)
         mAtmosphereCB->CopyData(0, cb);
+
+    mCommonConstanants.gGameResolution[0] = 1920;
+    mCommonConstanants.gGameResolution[1] = 1080;
+
+    mCommonConstanants.gRayMarchingResolution[0] = 1920;
+    mCommonConstanants.gRayMarchingResolution[1] = 1080;
+
+    mCommonConstanants.gCameraVolumeResolution[0] = 1920;
+    mCommonConstanants.gCameraVolumeResolution[1] = 1080;
+
+    viewRayMarchMaxSPP = viewRayMarchMinSPP >= viewRayMarchMaxSPP ? viewRayMarchMinSPP + 1 : viewRayMarchMaxSPP;
+    mCommonConstanants.RayMarchMinMaxSPP[0] = float(viewRayMarchMinSPP);
+    mCommonConstanants.RayMarchMinMaxSPP[1] = float(viewRayMarchMaxSPP);
 
     if (mCommonCB)
         mCommonCB->CopyData(0, mCommonConstanants);

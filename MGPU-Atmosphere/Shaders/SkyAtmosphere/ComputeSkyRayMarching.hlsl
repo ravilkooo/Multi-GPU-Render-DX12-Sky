@@ -555,6 +555,10 @@ void ComputeTransmittanceLutCS(uint3 dispatchThreadId : SV_DispatchThreadID)
     float2 pixPos = float2(dispatchThreadId.xy) + 0.5f;
     AtmosphereParameters Atmosphere = GetAtmosphereParameters();
 
+    // Проверяем границы
+    if (dispatchThreadId.x >= TRANSMITTANCE_TEXTURE_WIDTH || dispatchThreadId.y >= TRANSMITTANCE_TEXTURE_HEIGHT)
+        return;
+    
 	// Compute camera position from LUT coords
     float2 uv = (pixPos) / float2(TRANSMITTANCE_TEXTURE_WIDTH, TRANSMITTANCE_TEXTURE_HEIGHT);
     float viewHeight;
@@ -586,13 +590,17 @@ void ComputeTransmittanceLutCS(uint3 dispatchThreadId : SV_DispatchThreadID)
 
 // SkyViewLut
 
-/*
-float4 SkyViewLutPS(CommonVertexOut Input) : SV_TARGET
+[numthreads(32, 32, 1)]
+void ComputeSkyViewLutCS(uint3 dispatchThreadId : SV_DispatchThreadID)
 {
-    float2 pixPos = Input.PosH.xy;
-    AtmosphereParameters Atmosphere = GetAtmosphereParameters();
-
+    float2 pixPos = float2(dispatchThreadId.xy) + 0.5f;
     float2 skyViewRes = float2(192.0, 108.0);
+
+    // Проверяем границы
+    if (dispatchThreadId.x >= skyViewRes.x || dispatchThreadId.y >= skyViewRes.y)
+        return;
+    
+    AtmosphereParameters Atmosphere = GetAtmosphereParameters();
     
     float3 ClipSpace = float3((pixPos / skyViewRes) * float2(2.0, -2.0) - float2(1.0, -1.0), 1.0);
     float4 HViewPos = mul(gSkyInvProjMat, float4(ClipSpace, 1.0));
@@ -630,7 +638,7 @@ float4 SkyViewLutPS(CommonVertexOut Input) : SV_TARGET
     if (!MoveToTopAtmosphere(WorldPos, WorldDir, Atmosphere.TopRadius))
     {
 		// Ray is not intersecting the atmosphere
-        return float4(0, 0, 0, 1);
+        SkyViewLutOut[dispatchThreadId.xy] = float4(0, 0, 0, 1);
     }
 
     const bool ground = false;
@@ -642,9 +650,8 @@ float4 SkyViewLutPS(CommonVertexOut Input) : SV_TARGET
 
     float3 L = ss.L;
 
-    return float4(L, 1);
+    SkyViewLutOut[dispatchThreadId.xy] = float4(L, 1);
 }
-*/
 
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -156,10 +156,14 @@ namespace Atmosphere
         unsigned int gMouseLastDownPos[2];
         unsigned int gFrameId;
         unsigned int gTerrainResolution;
-        float gScreenshotCaptureActive;
 
         float RayMarchMinMaxSPP[2];
-        float pad[2];
+        unsigned int gGameResolution[2];
+
+        unsigned int gRayMarchingResolution[2];
+        unsigned int gCameraVolumeResolution[2];
+
+        float gScreenshotCaptureActive;
     };
 
     class SkyAtmosphere
@@ -180,6 +184,10 @@ namespace Atmosphere
         GDescriptor mMultiScatLutUAV;
         GDescriptor mMultiScatLutSRV;
 
+        std::shared_ptr<GTexture> mSkyViewLut;
+        GDescriptor mSkyViewLutUAV;
+        GDescriptor mSkyViewLutSRV;
+
         AtmosphereInfo mAtmosphereInfos;
         LookUpTablesInfo mLutInfos;
 
@@ -195,6 +203,9 @@ namespace Atmosphere
         Vector3 mViewDir;
         Vector3 mSunDir;
 
+        int viewRayMarchMinSPP = 4;
+        int viewRayMarchMaxSPP = 14;
+
         CommonConstantBufferStructure mCommonConstanants;
 
         SkyAtmosphere(const std::shared_ptr<GDevice>& device);
@@ -209,6 +220,7 @@ namespace Atmosphere
 
         void LoadTransmittanceLutResource();
         void LoadMultiScatLutResource();
+        void LoadSkyViewLutResource();
         void LoadResources();
 
         void UpdateSkyAtmosphereBuffer();
@@ -224,8 +236,8 @@ namespace Atmosphere
 
         void PopulateTransmittanceLutCommands(const std::shared_ptr<GCommandList>& cmdList);
         void PopulateMultiScatLutCommands(const std::shared_ptr<GCommandList>& cmdList);
-        /*
         void PopulateSkyViewLutCommands(const std::shared_ptr<GCommandList>& cmdList);
+        /*
         void PopulateAerialPerspectiveCommands(const std::shared_ptr<GCommandList>& cmdList);
         void PopulateRayMarchingCommands(const std::shared_ptr<GCommandList>& cmdList);
         */

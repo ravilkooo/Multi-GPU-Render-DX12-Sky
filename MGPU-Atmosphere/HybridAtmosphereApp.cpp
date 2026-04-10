@@ -415,9 +415,20 @@ void HybridAtmosphereApp::Draw(const GameTimer& gt)
         skyAtmosphere->mViewDir.y = _viewDir.z;
         skyAtmosphere->mViewDir.z = _viewDir.y;
 
+        /*
         Vector3 tmp = Vector3::Zero;
         tmp.y = cos(XM_PIDIV4);
         tmp.z = cos(XM_PIDIV4);
+        tmp = -tmp;
+        skyAtmosphere->mSunDir = tmp;
+        */
+        //skyAtmosphere->mSunDir.x = -tmp.x;
+        /*
+        skyAtmosphere->mSunDir.x = 0.0f;
+        skyAtmosphere->mSunDir.y = 0.90045f;
+        skyAtmosphere->mSunDir.z = 0.43497f;
+        */
+        Vector3 tmp = mRotatedLightDirections[0];
         tmp = -tmp;
         skyAtmosphere->mSunDir = tmp;
         //skyAtmosphere->mSunDir.x = -tmp.x;
@@ -426,8 +437,8 @@ void HybridAtmosphereApp::Draw(const GameTimer& gt)
         skyAtmosphere->mSunDir.z = tmp.y;
 
 
-        XMMATRIX viewMatrix = XMMatrixIdentity();
-        XMMATRIX projMatrix = XMMatrixOrthographicLH(1.0, 1.0, -1.0, 1.0);
+        XMMATRIX viewMatrix = camera->GetViewMatrix();
+        XMMATRIX projMatrix = camera->GetProjectionMatrix();
         XMMATRIX ViewProjMat = XMMatrixMultiply(viewMatrix, projMatrix);
         float mSunIlluminanceScale = 1.0f;
         int NumScatteringOrder = 4;
@@ -440,15 +451,13 @@ void HybridAtmosphereApp::Draw(const GameTimer& gt)
         skyAtmosphere->mCommonConstanants.gScatteringMaxPathDepth = NumScatteringOrder;
         skyAtmosphere->mCommonConstanants.gFrameTimeSec = gt.DeltaTime();
         skyAtmosphere->mCommonConstanants.gTimeSec = gt.TotalTime();
-        skyAtmosphere->mCommonConstanants.gFrameId = 0;
-        // uiViewRayMarchMaxSPP = uiViewRayMarchMinSPP >= uiViewRayMarchMaxSPP ? uiViewRayMarchMinSPP + 1 : uiViewRayMarchMaxSPP;
-        skyAtmosphere->mCommonConstanants.RayMarchMinMaxSPP[0] = 0.0f;
-        skyAtmosphere->mCommonConstanants.RayMarchMinMaxSPP[1] = 0.0f;
+        skyAtmosphere->mCommonConstanants.gFrameId = gFrameId;
         skyAtmosphere->mCommonConstanants.gScreenshotCaptureActive = false; // Make sure the terrain or sundisk are not taken into account to focus on the most important part: atmosphere
     }
     skyAtmosphere->UpdateSkyAtmosphereBuffer();
     skyAtmosphere->PopulateTransmittanceLutCommands(primeCmdList);
     skyAtmosphere->PopulateMultiScatLutCommands(primeCmdList);
+    skyAtmosphere->PopulateSkyViewLutCommands(primeCmdList);
 
     PopulateNormalMapCommands(primeCmdList);
     PopulateAmbientMapCommands(primeCmdList);
@@ -493,6 +502,7 @@ bool HybridAtmosphereApp::Initialize()
     InitFrameResource();
 
     skyAtmosphere = std::make_shared<Atmosphere::SkyAtmosphere>(primeDevice);
+    gFrameId = 0u;
 
     OnResize();
 
@@ -1205,6 +1215,7 @@ int HybridAtmosphereApp::Run()
             }
 
             timer.Tick();
+            gFrameId++;
 
             {
                 Update(timer);
