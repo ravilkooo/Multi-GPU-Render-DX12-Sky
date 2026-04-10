@@ -64,32 +64,41 @@ void Atmosphere::SkyAtmosphere::InitRootSignatures()
 {
     // Build a dedicated root signature for the transmittance pass (it needs b1 and b2 CBs)
     mRootSignature = std::make_shared<GRootSignature>();
-    mRootSignature->AddConstantBufferParameter(0); // commmon_BUFFER
-    mRootSignature->AddConstantBufferParameter(1); // SKYATMOSPHERE_BUFFER
+    mRootSignature->AddConstantBufferParameter((UINT) CBSlots::Common); // commmon_BUFFER
+    mRootSignature->AddConstantBufferParameter((UINT) CBSlots::Atmosphere); // SKYATMOSPHERE_BUFFER
     //mRootSignature->AddConstantBufferParameter(0, 1); // LutConstants (Dimensions, InvDimensions)
-
-    CD3DX12_DESCRIPTOR_RANGE uavRange0;
-    CD3DX12_DESCRIPTOR_RANGE uavRange1;
-    CD3DX12_DESCRIPTOR_RANGE uavRange2;
-    uavRange0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 0, 0); // u0 transmittance output
-    uavRange1.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 1, 0); // u1 multiscat output
-    uavRange2.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 0, 1); // u0, space1 skyview output
-    mRootSignature->AddDescriptorParameter(&uavRange0, 1);
-    mRootSignature->AddDescriptorParameter(&uavRange1, 1);
-    mRootSignature->AddDescriptorParameter(&uavRange2, 1);
 
     CD3DX12_DESCRIPTOR_RANGE srvRange0;
     CD3DX12_DESCRIPTOR_RANGE srvRange1;
     CD3DX12_DESCRIPTOR_RANGE srvRange2;
     CD3DX12_DESCRIPTOR_RANGE srvRange3;
-    srvRange0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0, 0); // t0 transmittance
-    srvRange1.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 1, 0); // t1 multiscat
-    srvRange2.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 2, 0); // t2, skyview
-    srvRange3.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 3, 0); // t3, shadow
+    CD3DX12_DESCRIPTOR_RANGE srvRange4;
+    srvRange0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, (UINT)TextureSlots::Transmittance, 0); // t0 transmittance
+    srvRange1.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, (UINT)TextureSlots::Multiscat, 0); // t1 multiscat
+    srvRange2.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, (UINT)TextureSlots::SkyView, 0); // t2, skyview
+    srvRange3.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, (UINT)TextureSlots::Aerial, 0); // t3, aerial
+    srvRange4.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, (UINT)TextureSlots::Shadow, 0); // t4, shadow
     mRootSignature->AddDescriptorParameter(&srvRange0, 1);
     mRootSignature->AddDescriptorParameter(&srvRange1, 1);
     mRootSignature->AddDescriptorParameter(&srvRange2, 1);
     mRootSignature->AddDescriptorParameter(&srvRange3, 1);
+    mRootSignature->AddDescriptorParameter(&srvRange4, 1);
+
+    CD3DX12_DESCRIPTOR_RANGE uavRange0;
+    CD3DX12_DESCRIPTOR_RANGE uavRange1;
+    CD3DX12_DESCRIPTOR_RANGE uavRange2;
+    CD3DX12_DESCRIPTOR_RANGE uavRange3;
+    CD3DX12_DESCRIPTOR_RANGE uavRange4;
+    uavRange0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, (UINT)UavSlots::Transmittance, 0); // u0 transmittance output
+    uavRange1.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, (UINT)UavSlots::Multiscat, 0); // u1 multiscat output
+    uavRange2.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, (UINT)UavSlots::SkyView, 0); // u2 skyview output
+    uavRange3.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, (UINT)UavSlots::Aerial, 0); // u3 aerial output
+    uavRange4.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, (UINT)UavSlots::RaymMarching, 0); // u4 ray marching output
+    mRootSignature->AddDescriptorParameter(&uavRange0, 1);
+    mRootSignature->AddDescriptorParameter(&uavRange1, 1);
+    mRootSignature->AddDescriptorParameter(&uavRange2, 1);
+    mRootSignature->AddDescriptorParameter(&uavRange3, 1);
+    mRootSignature->AddDescriptorParameter(&uavRange4, 1);
 
     const CD3DX12_STATIC_SAMPLER_DESC pointClamp(
         0, // shaderRegister
@@ -348,12 +357,11 @@ void Atmosphere::SkyAtmosphere::PopulateTransmittanceLutCommands(const std::shar
     cmdList->SetComputeRootSignature(*mRootSignature);
     cmdList->SetPipelineState(*mAtmospherePSOs["transmittance"]);
     
-    if (mCommonCB)
-        cmdList->SetComputeRootConstantBufferView(0, *mCommonCB);
-    if (mAtmosphereCB)
-        cmdList->SetComputeRootConstantBufferView(1, *mAtmosphereCB);
+    cmdList->SetComputeRootConstantBufferView((UINT)CBSlots::Common, *mCommonCB);
+    cmdList->SetComputeRootConstantBufferView((UINT)CBSlots::Atmosphere, *mAtmosphereCB);
 
-    cmdList->SetComputeRootDescriptorTable(2, &mTransmittanceLutUAV);
+    cmdList->SetComputeRootDescriptorTable((UINT)CBSlots::Count + (UINT)TextureSlots::Count + (UINT)UavSlots::Transmittance,
+        &mTransmittanceLutUAV);
 
     auto IntDivRoundUp = [](UINT a, UINT b) { return (a + b - 1) / b; };
 
@@ -382,8 +390,9 @@ void Atmosphere::SkyAtmosphere::PopulateMultiScatLutCommands(const std::shared_p
     // cmdList->SetComputeRootSignature(*mRootSignature);
     cmdList->SetPipelineState(*mAtmospherePSOs["multiscat"]);
     
-    cmdList->SetComputeRootDescriptorTable(3, &mMultiScatLutUAV);
-    cmdList->SetComputeRootDescriptorTable(5, &mTransmittanceLutSRV);
+    cmdList->SetComputeRootDescriptorTable((UINT)CBSlots::Count + (UINT)TextureSlots ::Transmittance, &mTransmittanceLutSRV);
+
+    cmdList->SetComputeRootDescriptorTable((UINT)CBSlots::Count + (UINT)TextureSlots::Count + (UINT)UavSlots::Multiscat, &mMultiScatLutUAV);
 
     const UINT MultiScatteringLUTRes = 32;
     cmdList->Dispatch(MultiScatteringLUTRes, MultiScatteringLUTRes, 1);
@@ -402,7 +411,7 @@ void Atmosphere::SkyAtmosphere::PopulateSkyViewLutCommands(const std::shared_ptr
     // Set viewport/scissor to transmittance texture size
 
     // Transition resource to UAV and clear
-    cmdList->TransitionBarrier(*mTransmittanceLut, D3D12_RESOURCE_STATE_GENERIC_READ);
+    // cmdList->TransitionBarrier(*mTransmittanceLut, D3D12_RESOURCE_STATE_GENERIC_READ);
     cmdList->TransitionBarrier(*mMultiScatLut, D3D12_RESOURCE_STATE_GENERIC_READ);
     cmdList->TransitionBarrier(*mSkyViewLut, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
     cmdList->FlushResourceBarriers();
@@ -410,9 +419,11 @@ void Atmosphere::SkyAtmosphere::PopulateSkyViewLutCommands(const std::shared_ptr
     // cmdList->SetComputeRootSignature(*mRootSignature);
     cmdList->SetPipelineState(*mAtmospherePSOs["skyview"]);
 
-    cmdList->SetComputeRootDescriptorTable(4, &mSkyViewLutUAV);
-    cmdList->SetComputeRootDescriptorTable(5, &mTransmittanceLutSRV);
-    cmdList->SetComputeRootDescriptorTable(6, &mMultiScatLutSRV);
+    cmdList->SetComputeRootDescriptorTable((UINT)CBSlots::Count + (UINT)TextureSlots::Multiscat, &mMultiScatLutSRV);
+
+    cmdList->SetComputeRootDescriptorTable((UINT)CBSlots::Count + (UINT)TextureSlots::Count + (UINT)UavSlots::SkyView, &mSkyViewLutUAV);
+
+    // cmdList->SetComputeRootDescriptorTable(5, &mTransmittanceLutSRV);
 
     auto IntDivRoundUp = [](UINT a, UINT b) { return (a + b - 1) / b; };
 

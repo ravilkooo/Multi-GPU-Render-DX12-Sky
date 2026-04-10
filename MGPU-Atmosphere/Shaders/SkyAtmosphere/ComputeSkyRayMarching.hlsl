@@ -660,10 +660,16 @@ void ComputeSkyViewLutCS(uint3 dispatchThreadId : SV_DispatchThreadID)
 
 // CameraVolume
 
-/*
-float4 RenderCameraVolumePS(GeometryOutput Input) : SV_TARGET0
+[numthreads(16, 16, 32)]
+void ComputeCameraVolumePS(uint3 dispatchThreadId : SV_DispatchThreadID)
 {
-    float2 pixPos = Input.position.xy;
+    float2 pixPos = float2(dispatchThreadId.xy) + 0.5f;
+    float sliceId = dispatchThreadId.z;
+    float3 camVolRes = float3(32.0, 32.0, 32.0);
+
+    // Проверяем границы
+    if (dispatchThreadId.x >= camVolRes.x || dispatchThreadId.y >= camVolRes.y || dispatchThreadId.z >= camVolRes.z)
+        return;
     AtmosphereParameters Atmosphere = GetAtmosphereParameters();
 
     float3 ClipSpace = float3((pixPos / float2(cameraVolumeResolution)) * float2(2.0, -2.0) - float2(1.0, -1.0), 0.5);
@@ -676,7 +682,7 @@ float4 RenderCameraVolumePS(GeometryOutput Input) : SV_TARGET0
     float3 SunDir = sun_direction;
     float3 SunLuminance = 0.0;
 
-    float Slice = ((float(Input.sliceId) + 0.5f) / AP_SLICE_COUNT);
+    float Slice = ((sliceId + 0.5f) / AP_SLICE_COUNT);
     Slice *= Slice; // squared distribution
     Slice *= AP_SLICE_COUNT;
 
@@ -709,13 +715,13 @@ float4 RenderCameraVolumePS(GeometryOutput Input) : SV_TARGET0
         if (!MoveToTopAtmosphere(WorldPos, WorldDir, Atmosphere.TopRadius))
         {
 			// Ray is not intersecting the atmosphere
-            return float4(0.0, 0.0, 0.0, 1.0);
+            AerialPerspectiveLutOut[dispatchThreadId.xyz] = float4(0.0, 0.0, 0.0, 1.0);
         }
         float LengthToAtmosphere = length(prevWorlPos - WorldPos);
         if (tMaxMax < LengthToAtmosphere)
         {
 			// tMaxMax for this voxel is not within earth atmosphere
-            return float4(0.0, 0.0, 0.0, 1.0);
+            AerialPerspectiveLutOut[dispatchThreadId.xyz] = float4(0.0, 0.0, 0.0, 1.0);
         }
 		// Now world position has been moved to the atmosphere boundary: we need to reduce tMaxMax accordingly. 
         tMaxMax = max(0.0, tMaxMax - LengthToAtmosphere);
@@ -723,7 +729,7 @@ float4 RenderCameraVolumePS(GeometryOutput Input) : SV_TARGET0
 
 
     const bool ground = false;
-    const float SampleCountIni = max(1.0, float(Input.sliceId + 1.0) * 2.0f);
+    const float SampleCountIni = max(1.0, (sliceId + 1.0) * 2.0f);
     const float DepthBufferValue = -1.0;
     const bool VariableSampleCount = false;
     const bool MieRayPhase = true;
@@ -731,9 +737,8 @@ float4 RenderCameraVolumePS(GeometryOutput Input) : SV_TARGET0
 
 
     const float Transmittance = dot(ss.Transmittance, float3(1.0f / 3.0f, 1.0f / 3.0f, 1.0f / 3.0f));
-    return float4(ss.L, 1.0 - Transmittance);
+    AerialPerspectiveLutOut[dispatchThreadId.xyz] = float4(ss.L, 1.0 - Transmittance);
 }
-*/
 
 ////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////

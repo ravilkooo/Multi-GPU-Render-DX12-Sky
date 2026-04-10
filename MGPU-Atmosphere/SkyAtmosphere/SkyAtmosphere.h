@@ -194,6 +194,18 @@ namespace Atmosphere
         std::shared_ptr<ConstantUploadBuffer<AtmosphereCB>> mAtmosphereCB;
         std::shared_ptr<ConstantUploadBuffer<CommonConstantBufferStructure>> mCommonCB;
 
+        enum class CBSlots : UINT {
+            Common = 0u, Atmosphere, Count
+        };
+
+        enum class TextureSlots : UINT {
+            Transmittance = 0u, Multiscat, SkyView, Aerial, Shadow, Count
+        };
+
+        enum class UavSlots : UINT {
+            Transmittance = 0u, Multiscat, SkyView, Aerial, RaymMarching, Count
+        };
+
     public:
         Matrix mShadowmapViewProjMat;
         Matrix mViewMat;
