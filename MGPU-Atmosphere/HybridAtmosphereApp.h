@@ -69,7 +69,8 @@ protected:
     */
 
     void Update(const GameTimer& gt) override;
-    void PopulateShadowMapCommands(const std::shared_ptr<GCommandList>& cmdList);;
+    void PopulateAtmosphereCommands(const std::shared_ptr<GCommandList>& cmdList);
+    void PopulateShadowMapCommands(const std::shared_ptr<GCommandList>& cmdList);
     void PopulateNormalMapCommands(const std::shared_ptr<GCommandList>& cmdList);
     void PopulateAmbientMapCommands(const std::shared_ptr<GCommandList>& cmdList) const;
     void PopulateForwardPathCommands(const std::shared_ptr<GCommandList>& cmdList);

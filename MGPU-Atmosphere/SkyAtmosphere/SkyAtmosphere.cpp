@@ -1,10 +1,12 @@
 #include "SkyAtmosphere.h"
 #include <string>
 
-Atmosphere::SkyAtmosphere::SkyAtmosphere(const std::shared_ptr<GDevice>& device)
+Atmosphere::SkyAtmosphere::SkyAtmosphere(const std::shared_ptr<GDevice>& device,
+    UINT screenWidth, UINT screenHeight)
 {
 	mDevice = device;
 
+    InitAtmosphereData();
     LoadResources();
     InitRootSignatures();
     LoadShaders();
@@ -12,44 +14,76 @@ Atmosphere::SkyAtmosphere::SkyAtmosphere(const std::shared_ptr<GDevice>& device)
     SetupEarthAtmosphere();
 }
 
+void Atmosphere::SkyAtmosphere::OnResize(const UINT newScreenWidth, const UINT newScreenHeight)
+{
+
+
+}
+
+void Atmosphere::SkyAtmosphere::InitAtmosphereData()
+{
+	// All units in kilometers
+	const float EarthBottomRadius = 6360.0f;
+	const float EarthTopRadius = 6460.0f;   // 100km atmosphere radius, less edge visible and it contain 99.99% of the atmosphere medium https://en.wikipedia.org/wiki/K%C3%A1rm%C3%A1n_line
+	const float EarthRayleighScaleHeight = 8.0f;
+	const float EarthMieScaleHeight = 1.2f;
+
+	// Sun - This should not be part of the sky model...
+	//info.solar_irradiance = { 1.474000f, 1.850400f, 1.911980f };
+	mAtmosphereInfos.solar_irradiance = { 1.0f, 1.0f, 1.0f };	// Using a normalise sun illuminance. This is to make sure the LUTs acts as a transfert factor to apply the runtime computed sun irradiance over.
+	mAtmosphereInfos.sun_angular_radius = 0.004675f;
+
+	// Earth
+	mAtmosphereInfos.bottom_radius = EarthBottomRadius;
+	mAtmosphereInfos.top_radius = EarthTopRadius;
+	mAtmosphereInfos.ground_albedo = { 0.0f, 0.0f, 0.0f };
+
+	// Raleigh scattering
+	mAtmosphereInfos.rayleigh_density.layers[0] = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
+	mAtmosphereInfos.rayleigh_density.layers[1] = { 0.0f, 1.0f, -1.0f / EarthRayleighScaleHeight, 0.0f, 0.0f };
+	mAtmosphereInfos.rayleigh_scattering = { 0.005802f, 0.013558f, 0.033100f };		// 1/km
+
+	// Mie scattering
+	mAtmosphereInfos.mie_density.layers[0] = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
+	mAtmosphereInfos.mie_density.layers[1] = { 0.0f, 1.0f, -1.0f / EarthMieScaleHeight, 0.0f, 0.0f };
+	mAtmosphereInfos.mie_scattering = { 0.003996f, 0.003996f, 0.003996f };			// 1/km
+	mAtmosphereInfos.mie_extinction = { 0.004440f, 0.004440f, 0.004440f };			// 1/km
+	mAtmosphereInfos.mie_phase_function_g = 0.8f;
+
+	// Ozone absorption
+	mAtmosphereInfos.absorption_density.layers[0] = { 25.0f, 0.0f, 0.0f, 1.0f / 15.0f, -2.0f / 3.0f };
+	mAtmosphereInfos.absorption_density.layers[1] = { 0.0f, 0.0f, 0.0f, -1.0f / 15.0f, 8.0f / 3.0f };
+	mAtmosphereInfos.absorption_extinction = { 0.000650f, 0.001881f, 0.000085f };	// 1/km
+
+	const double max_sun_zenith_angle = DirectX::XM_PI * 120.0 / 180.0; // (use_half_precision_ ? 102.0 : 120.0) / 180.0 * kPi;
+	mAtmosphereInfos.mu_s_min = (float)cos(max_sun_zenith_angle);
+
+
+	mCommonConstanants.gameResolution[0] = 1920;
+	mCommonConstanants.gameResolution[1] = 1080;
+
+	mCommonConstanants.transmittanceLutResolution[0] = 1920;
+    mCommonConstanants.transmittanceLutResolution[1] = 1080;
+
+	mCommonConstanants.multiScatLutResolution[0] = 32;
+	mCommonConstanants.multiScatLutResolution[1] = 32;
+
+	mCommonConstanants.skyViewLutResolution[0] = 192;
+    mCommonConstanants.skyViewLutResolution[1] = 108;
+
+	mCommonConstanants.aerialPerpspectiveLutResolution[0] = 32;
+	mCommonConstanants.aerialPerpspectiveLutResolution[1] = 32;
+	mCommonConstanants.aerialPerpspectiveLutResolution[2] = 32;
+
+	mCommonConstanants.rayMarchingResolution[0] = 1920;
+	mCommonConstanants.rayMarchingResolution[1] = 1080;
+
+	mCommonConstanants.rayMarchMinMaxSPP[0] = float(viewRayMarchMinSPP);
+	mCommonConstanants.rayMarchMinMaxSPP[1] = float(viewRayMarchMaxSPP);
+}
+
 void Atmosphere::SkyAtmosphere::SetupEarthAtmosphere()
 {
-    // All units in kilometers
-    const float EarthBottomRadius = 6360.0f;
-    const float EarthTopRadius = 6460.0f;   // 100km atmosphere radius, less edge visible and it contain 99.99% of the atmosphere medium https://en.wikipedia.org/wiki/K%C3%A1rm%C3%A1n_line
-    const float EarthRayleighScaleHeight = 8.0f;
-    const float EarthMieScaleHeight = 1.2f;
-
-    // Sun - This should not be part of the sky model...
-    //info.solar_irradiance = { 1.474000f, 1.850400f, 1.911980f };
-    mAtmosphereInfos.solar_irradiance = { 1.0f, 1.0f, 1.0f };	// Using a normalise sun illuminance. This is to make sure the LUTs acts as a transfert factor to apply the runtime computed sun irradiance over.
-    mAtmosphereInfos.sun_angular_radius = 0.004675f;
-
-    // Earth
-    mAtmosphereInfos.bottom_radius = EarthBottomRadius;
-    mAtmosphereInfos.top_radius = EarthTopRadius;
-    mAtmosphereInfos.ground_albedo = { 0.0f, 0.0f, 0.0f };
-
-    // Raleigh scattering
-    mAtmosphereInfos.rayleigh_density.layers[0] = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
-    mAtmosphereInfos.rayleigh_density.layers[1] = { 0.0f, 1.0f, -1.0f / EarthRayleighScaleHeight, 0.0f, 0.0f };
-    mAtmosphereInfos.rayleigh_scattering = { 0.005802f, 0.013558f, 0.033100f };		// 1/km
-
-    // Mie scattering
-    mAtmosphereInfos.mie_density.layers[0] = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
-    mAtmosphereInfos.mie_density.layers[1] = { 0.0f, 1.0f, -1.0f / EarthMieScaleHeight, 0.0f, 0.0f };
-    mAtmosphereInfos.mie_scattering = { 0.003996f, 0.003996f, 0.003996f };			// 1/km
-    mAtmosphereInfos.mie_extinction = { 0.004440f, 0.004440f, 0.004440f };			// 1/km
-    mAtmosphereInfos.mie_phase_function_g = 0.8f;
-
-    // Ozone absorption
-    mAtmosphereInfos.absorption_density.layers[0] = { 25.0f, 0.0f, 0.0f, 1.0f / 15.0f, -2.0f / 3.0f };
-    mAtmosphereInfos.absorption_density.layers[1] = { 0.0f, 0.0f, 0.0f, -1.0f / 15.0f, 8.0f / 3.0f };
-    mAtmosphereInfos.absorption_extinction = { 0.000650f, 0.001881f, 0.000085f };	// 1/km
-
-    const double max_sun_zenith_angle = DirectX::XM_PI * 120.0 / 180.0; // (use_half_precision_ ? 102.0 : 120.0) / 180.0 * kPi;
-    mAtmosphereInfos.mu_s_min = (float)cos(max_sun_zenith_angle);
-    
     // Ensure constant buffers exist and are populated before dispatching LUT passes
     mAtmosphereCB = std::make_shared<ConstantUploadBuffer<AtmosphereCB>>(mDevice, 1, L"SkyAtmosphere CB");
     AtmosphereCB cb{};
@@ -654,17 +688,17 @@ void Atmosphere::SkyAtmosphere::UpdateSkyAtmosphereBuffer()
     cb.bottom_radius = mAtmosphereInfos.bottom_radius;
     cb.top_radius = mAtmosphereInfos.top_radius;
     cb.MultipleScatteringFactor = 1;
-    cb.MultiScatteringLUTRes = MultiScatteringLUTRes;
+    cb.MultiScatteringLUTRes = mCommonConstanants.multiScatLutResolution[0];
 
     //
-    cb.TRANSMITTANCE_TEXTURE_WIDTH = mLutInfos.TRANSMITTANCE_TEXTURE_WIDTH;
-    cb.TRANSMITTANCE_TEXTURE_HEIGHT = mLutInfos.TRANSMITTANCE_TEXTURE_HEIGHT;
-    cb.IRRADIANCE_TEXTURE_WIDTH = mLutInfos.IRRADIANCE_TEXTURE_WIDTH;
-    cb.IRRADIANCE_TEXTURE_HEIGHT = mLutInfos.IRRADIANCE_TEXTURE_HEIGHT;
-    cb.SCATTERING_TEXTURE_R_SIZE = mLutInfos.SCATTERING_TEXTURE_R_SIZE;
-    cb.SCATTERING_TEXTURE_MU_SIZE = mLutInfos.SCATTERING_TEXTURE_MU_SIZE;
-    cb.SCATTERING_TEXTURE_MU_S_SIZE = mLutInfos.SCATTERING_TEXTURE_MU_S_SIZE;
-    cb.SCATTERING_TEXTURE_NU_SIZE = mLutInfos.SCATTERING_TEXTURE_NU_SIZE;
+    // cb.TRANSMITTANCE_TEXTURE_WIDTH = mLutInfos.TRANSMITTANCE_TEXTURE_WIDTH;
+    // cb.TRANSMITTANCE_TEXTURE_HEIGHT = mLutInfos.TRANSMITTANCE_TEXTURE_HEIGHT;
+    // cb.IRRADIANCE_TEXTURE_WIDTH = mLutInfos.IRRADIANCE_TEXTURE_WIDTH;
+    // cb.IRRADIANCE_TEXTURE_HEIGHT = mLutInfos.IRRADIANCE_TEXTURE_HEIGHT;
+    // cb.SCATTERING_TEXTURE_R_SIZE = mLutInfos.SCATTERING_TEXTURE_R_SIZE;
+    // cb.SCATTERING_TEXTURE_MU_SIZE = mLutInfos.SCATTERING_TEXTURE_MU_SIZE;
+    // cb.SCATTERING_TEXTURE_MU_S_SIZE = mLutInfos.SCATTERING_TEXTURE_MU_S_SIZE;
+    // cb.SCATTERING_TEXTURE_NU_SIZE = mLutInfos.SCATTERING_TEXTURE_NU_SIZE;
     cb.SKY_SPECTRAL_RADIANCE_TO_LUMINANCE = Vector3(114974.916437f, 71305.954816f, 65310.548555f); // Not used if using LUTs as transfert
     cb.SUN_SPECTRAL_RADIANCE_TO_LUMINANCE = Vector3(98242.786222f, 69954.398112f, 66475.012354f);  // idem
 
@@ -690,18 +724,9 @@ void Atmosphere::SkyAtmosphere::UpdateSkyAtmosphereBuffer()
     if (mAtmosphereCB)
         mAtmosphereCB->CopyData(0, cb);
 
-    mCommonConstanants.gGameResolution[0] = 1920;
-    mCommonConstanants.gGameResolution[1] = 1080;
-
-    mCommonConstanants.gRayMarchingResolution[0] = 1920;
-    mCommonConstanants.gRayMarchingResolution[1] = 1080;
-
-    mCommonConstanants.gCameraVolumeResolution[0] = 32;
-    mCommonConstanants.gCameraVolumeResolution[1] = 32;
-
     viewRayMarchMaxSPP = viewRayMarchMinSPP >= viewRayMarchMaxSPP ? viewRayMarchMinSPP + 1 : viewRayMarchMaxSPP;
-    mCommonConstanants.RayMarchMinMaxSPP[0] = float(viewRayMarchMinSPP);
-    mCommonConstanants.RayMarchMinMaxSPP[1] = float(viewRayMarchMaxSPP);
+    mCommonConstanants.rayMarchMinMaxSPP[0] = float(viewRayMarchMinSPP);
+    mCommonConstanants.rayMarchMinMaxSPP[1] = float(viewRayMarchMaxSPP);
 
     if (mCommonCB)
         mCommonCB->CopyData(0, mCommonConstanants);

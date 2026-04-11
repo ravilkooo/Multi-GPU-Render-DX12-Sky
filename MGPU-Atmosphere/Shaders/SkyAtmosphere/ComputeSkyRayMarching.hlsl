@@ -268,7 +268,7 @@ SingleScatteringResult IntegrateScatteredLuminance(
 
 // RayMarching
 
-#define AP_SLICE_COUNT 32.0f
+// #define AP_SLICE_COUNT 32.0f
 #define AP_KM_PER_SLICE 4.0f
 
 
@@ -292,15 +292,16 @@ struct RayMarchOutputStruct
 [numthreads(32, 32, 1)]
 void ComputeRayMarchingCS(uint3 dispatchThreadId : SV_DispatchThreadID)
 {
+    float AP_SLICE_COUNT = float(gAerialPerpspectiveLutResolution.z);
     RayMarchOutputStruct output = (RayMarchOutputStruct) 0;
 #if COLORED_TRANSMITTANCE_ENABLED
 	output.Transmittance = float4(0, 0, 0, 1);
 #endif
     
     float2 pixPos = float2(dispatchThreadId.xy) + 0.5f;
-    float2 rayMarchRes = float2(1920.0f, 1080.0f);
+    float2 rayMarchRes = float2(gRayMarchingResolution);
     
-    // Проверяем границы
+    // Check borders
     if (dispatchThreadId.x >= rayMarchRes.x || dispatchThreadId.y >= rayMarchRes.y)
     {
         return;
@@ -308,7 +309,7 @@ void ComputeRayMarchingCS(uint3 dispatchThreadId : SV_DispatchThreadID)
     
     AtmosphereParameters Atmosphere = GetAtmosphereParameters();
 
-    float3 ClipSpace = float3((pixPos / float2(rayMarchingResolution)) * float2(2.0, -2.0) - float2(1.0, -1.0), 1.0);
+    float3 ClipSpace = float3((pixPos / rayMarchRes) * float2(2.0, -2.0) - float2(1.0, -1.0), 1.0);
     float4 HViewPos = mul(gSkyInvProjMat, float4(ClipSpace, 1.0));
     float3 WorldDir = normalize(mul((float3x3) gSkyInvViewMat, HViewPos.xyz / HViewPos.w));
     float3 WorldPos = camera + float3(0, 0, Atmosphere.BottomRadius);
@@ -342,7 +343,7 @@ void ComputeRayMarchingCS(uint3 dispatchThreadId : SV_DispatchThreadID)
 
 		SkyViewLutParamsToUv(Atmosphere, IntersectGround, viewZenithCosAngle, lightViewCosAngle, viewHeight, uv);
 
-		//output.Luminance = float4(SkyViewLutTexture.SampleLevel(samplerLinearClamp, pixPos / float2(rayMarchingResolution), 0).rgb + GetSunLuminance(WorldPos, WorldDir, Atmosphere.BottomRadius), 1.0);
+		//output.Luminance = float4(SkyViewLutTexture.SampleLevel(samplerLinearClamp, pixPos / rayMarchRes, 0).rgb + GetSunLuminance(WorldPos, WorldDir, Atmosphere.BottomRadius), 1.0);
 		output.Luminance = float4(SkyViewLutTexture.SampleLevel(samplerLinearClamp, uv, 0).rgb + GetSunLuminance(WorldPos, WorldDir, Atmosphere.BottomRadius), 1.0);
 		RayMarchingOut[dispatchThreadId.xy] = output.Luminance;
         return;
@@ -357,8 +358,7 @@ void ComputeRayMarchingCS(uint3 dispatchThreadId : SV_DispatchThreadID)
 #if COLORED_TRANSMITTANCE_ENABLED
 #error The FASTAERIALPERSPECTIVE_ENABLED path does not support COLORED_TRANSMITTANCE_ENABLED.
 #else
-
-	ClipSpace = float3((pixPos / float2(rayMarchingResolution))*float2(2.0, -2.0) - float2(1.0, -1.0), DepthBufferValue);
+	ClipSpace = float3((pixPos / rayMarchRes)*float2(2.0, -2.0) - float2(1.0, -1.0), DepthBufferValue);
 	float4 DepthBufferWorldPos = mul(gSkyInvViewProjMat, float4(ClipSpace, 1.0));
 	DepthBufferWorldPos /= DepthBufferWorldPos.w;
 	float tDepth = length(DepthBufferWorldPos.xyz - (WorldPos + float3(0.0, 0.0, -Atmosphere.BottomRadius)));
@@ -372,7 +372,7 @@ void ComputeRayMarchingCS(uint3 dispatchThreadId : SV_DispatchThreadID)
 	}
 	float w = sqrt(Slice / AP_SLICE_COUNT);	// squared distribution
 
-	const float4 AP = Weight * AerialPerspectiveLutTexture.SampleLevel(samplerLinearClamp, float3(pixPos / float2(rayMarchingResolution), w), 0);
+    const float4 AP = Weight * AerialPerspectiveLutTexture.SampleLevel(samplerLinearClamp, float3(pixPos / rayMarchRes, w), 0);
 	L.rgb += AP.rgb;
 	float Opacity = AP.a;
 
@@ -397,7 +397,7 @@ void ComputeRayMarchingCS(uint3 dispatchThreadId : SV_DispatchThreadID)
     const bool VariableSampleCount = true;
     const bool MieRayPhase = true;
     SingleScatteringResult ss = IntegrateScatteredLuminance(pixPos, WorldPos, WorldDir, sun_direction,
-		Atmosphere, ground, SampleCountIni, DepthBufferValue, VariableSampleCount, MieRayPhase, rayMarchingResolution);
+		Atmosphere, ground, SampleCountIni, DepthBufferValue, VariableSampleCount, MieRayPhase, rayMarchRes);
 
     L += ss.L;
     float3 throughput = ss.Transmittance;
@@ -429,11 +429,12 @@ groupshared float3 LSharedMem[64];
 [numthreads(1, 1, 64)]
 void ComputeMultiScattCS(uint3 ThreadId : SV_DispatchThreadID)
 {
+    float2 multiScatRes = float2(gMultiScatLutResolution.xy);
     float2 pixPos = float2(ThreadId.xy) + 0.5f;
-    float2 uv = pixPos / MultiScatteringLUTRes;
+    float2 uv = pixPos / multiScatRes;
 
 
-    uv = float2(fromSubUvsToUnit(uv.x, MultiScatteringLUTRes), fromSubUvsToUnit(uv.y, MultiScatteringLUTRes));
+    uv = float2(fromSubUvsToUnit(uv.x, multiScatRes.x), fromSubUvsToUnit(uv.y, multiScatRes.y));
 
     AtmosphereParameters Atmosphere = GetAtmosphereParameters();
 
@@ -475,7 +476,7 @@ void ComputeMultiScattCS(uint3 ThreadId : SV_DispatchThreadID)
         WorldDir.y = sinTheta * sinPhi;
         WorldDir.z = cosPhi;
         SingleScatteringResult result = IntegrateScatteredLuminance(pixPos, WorldPos, WorldDir, sunDir,
-            Atmosphere, ground, SampleCountIni, DepthBufferValue, VariableSampleCount, MieRayPhase, gResolution);
+            Atmosphere, ground, SampleCountIni, DepthBufferValue, VariableSampleCount, MieRayPhase, gGameResolution);
 
         MultiScatAs1SharedMem[ThreadId.z] = result.MultiScatAs1 * SphereSolidAngle / (sqrtSample * sqrtSample);
         LSharedMem[ThreadId.z] = result.L * SphereSolidAngle / (sqrtSample * sqrtSample);
@@ -565,11 +566,11 @@ void ComputeTransmittanceLutCS(uint3 dispatchThreadId : SV_DispatchThreadID)
     AtmosphereParameters Atmosphere = GetAtmosphereParameters();
 
     // Проверяем границы
-    if (dispatchThreadId.x >= TRANSMITTANCE_TEXTURE_WIDTH || dispatchThreadId.y >= TRANSMITTANCE_TEXTURE_HEIGHT)
+    if (dispatchThreadId.x >= gTransmittanceLutResolution.x || dispatchThreadId.y >= gTransmittanceLutResolution.y)
         return;
     
 	// Compute camera position from LUT coords
-    float2 uv = (pixPos) / float2(TRANSMITTANCE_TEXTURE_WIDTH, TRANSMITTANCE_TEXTURE_HEIGHT);
+    float2 uv = (pixPos) / float2(gTransmittanceLutResolution);
     float viewHeight;
     float viewZenithCosAngle;
     UvToLutTransmittanceParams(Atmosphere, viewHeight, viewZenithCosAngle, uv);
@@ -586,7 +587,7 @@ void ComputeTransmittanceLutCS(uint3 dispatchThreadId : SV_DispatchThreadID)
     float3 transmittance = exp(-IntegrateScatteredLuminance(
         pixPos, WorldPos, WorldDir,
         sun_direction, Atmosphere, ground, SampleCountIni, DepthBufferValue, VariableSampleCount,
-        MieRayPhase, gResolution).OpticalDepth);
+        MieRayPhase, gGameResolution).OpticalDepth);
 
 	// Opetical depth to transmittance
     // return float4(transmittance, 1.0f);
@@ -603,9 +604,9 @@ void ComputeTransmittanceLutCS(uint3 dispatchThreadId : SV_DispatchThreadID)
 void ComputeSkyViewLutCS(uint3 dispatchThreadId : SV_DispatchThreadID)
 {
     float2 pixPos = float2(dispatchThreadId.xy) + 0.5f;
-    float2 skyViewRes = float2(192.0, 108.0);
+    float2 skyViewRes = float2(gSkyViewLutResolution);
 
-    // Проверяем границы
+    // Check Borders
     if (dispatchThreadId.x >= skyViewRes.x || dispatchThreadId.y >= skyViewRes.y)
         return;
     
@@ -655,7 +656,8 @@ void ComputeSkyViewLutCS(uint3 dispatchThreadId : SV_DispatchThreadID)
     const float DepthBufferValue = -1.0;
     const bool VariableSampleCount = true;
     const bool MieRayPhase = true;
-    SingleScatteringResult ss = IntegrateScatteredLuminance(pixPos, WorldPos, WorldDir, SunDir, Atmosphere, ground, SampleCountIni, DepthBufferValue, VariableSampleCount, MieRayPhase, gResolution);
+    SingleScatteringResult ss = IntegrateScatteredLuminance(pixPos, WorldPos, WorldDir,
+        SunDir, Atmosphere, ground, SampleCountIni, DepthBufferValue, VariableSampleCount, MieRayPhase, gGameResolution);
 
     float3 L = ss.L;
 
@@ -674,14 +676,14 @@ void ComputeCameraVolumeCS(uint3 dispatchThreadId : SV_DispatchThreadID)
 {
     float2 pixPos = float2(dispatchThreadId.xy) + 0.5f;
     float sliceId = dispatchThreadId.z;
-    float3 camVolRes = float3(32.0, 32.0, 32.0);
+    float3 camVolRes = float3(gAerialPerpspectiveLutResolution);
 
-    // Проверяем границы
+    // Check borders
     if (dispatchThreadId.x >= camVolRes.x || dispatchThreadId.y >= camVolRes.y || dispatchThreadId.z >= camVolRes.z)
         return;
     AtmosphereParameters Atmosphere = GetAtmosphereParameters();
 
-    float3 ClipSpace = float3((pixPos / float2(cameraVolumeResolution)) * float2(2.0, -2.0) - float2(1.0, -1.0), 0.5);
+    float3 ClipSpace = float3((pixPos / float2(gAerialPerpspectiveLutResolution.xy)) * float2(2.0, -2.0) - float2(1.0, -1.0), 0.5);
     float4 HViewPos = mul(gSkyInvProjMat, float4(ClipSpace, 1.0));
     float3 WorldDir = normalize(mul((float3x3) gSkyInvViewMat, HViewPos.xyz / HViewPos.w));
 
@@ -691,6 +693,7 @@ void ComputeCameraVolumeCS(uint3 dispatchThreadId : SV_DispatchThreadID)
     float3 SunDir = sun_direction;
     float3 SunLuminance = 0.0;
 
+    float AP_SLICE_COUNT = float(gAerialPerpspectiveLutResolution.z);
     float Slice = ((sliceId + 0.5f) / AP_SLICE_COUNT);
     Slice *= Slice; // squared distribution
     Slice *= AP_SLICE_COUNT;
@@ -708,7 +711,7 @@ void ComputeCameraVolumeCS(uint3 dispatchThreadId : SV_DispatchThreadID)
     viewHeight = length(newWorldPos);
     if (viewHeight <= (Atmosphere.BottomRadius + PLANET_RADIUS_OFFSET))
     {
-		// Apply a position offset to make sure no artefact are visible close to the earth boundaries for large voxel.
+		// Apply a position offset to make sure no artifact are visible close to the earth boundaries for large voxel.
         newWorldPos = normalize(newWorldPos) * (Atmosphere.BottomRadius + PLANET_RADIUS_OFFSET + 0.001f);
         WorldDir = normalize(newWorldPos - camPos);
         tMax = length(newWorldPos - camPos);
@@ -742,7 +745,8 @@ void ComputeCameraVolumeCS(uint3 dispatchThreadId : SV_DispatchThreadID)
     const float DepthBufferValue = -1.0;
     const bool VariableSampleCount = false;
     const bool MieRayPhase = true;
-    SingleScatteringResult ss = IntegrateScatteredLuminance(pixPos, WorldPos, WorldDir, SunDir, Atmosphere, ground, SampleCountIni, DepthBufferValue, VariableSampleCount, MieRayPhase, cameraVolumeResolution, tMaxMax);
+    SingleScatteringResult ss = IntegrateScatteredLuminance(pixPos, WorldPos, WorldDir, SunDir,
+        Atmosphere, ground, SampleCountIni, DepthBufferValue, VariableSampleCount, MieRayPhase, gAerialPerpspectiveLutResolution.xy, tMaxMax);
 
 
     const float Transmittance = dot(ss.Transmittance, float3(1.0f / 3.0f, 1.0f / 3.0f, 1.0f / 3.0f));

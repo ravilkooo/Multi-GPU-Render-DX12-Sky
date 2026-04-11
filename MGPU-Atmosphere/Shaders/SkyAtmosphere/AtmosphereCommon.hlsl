@@ -10,21 +10,25 @@ cbuffer CONSTANT_BUFFER : register(b0)
 	float3 gSunIlluminance;
 	int gScatteringMaxPathDepth;
 
-	uint2 gResolution;
 	float gFrameTimeSec;
 	float gTimeSec;
-
 	uint2 gMouseLastDownPos;
+
 	uint gFrameId;
 	uint gTerrainResolution;
-
 	float2 RayMarchMinMaxSPP;
+
     uint2 gGameResolution;
+    uint2 gTransmittanceLutResolution;
 	
-    uint2 rayMarchingResolution;
-    uint2 cameraVolumeResolution;
+    uint2 gMultiScatLutResolution;
+    uint2 gSkyViewLutResolution;
 	
+    uint3 gAerialPerpspectiveLutResolution;
 	float gScreenshotCaptureActive;
+	
+    uint2 gRayMarchingResolution;
+    float2 pad;
 };
 
 /*

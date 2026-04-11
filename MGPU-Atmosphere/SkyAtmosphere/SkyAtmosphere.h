@@ -33,17 +33,23 @@ namespace Atmosphere
         Vector3 solar_irradiance;
         // Sun angular radius (radians)
         float sun_angular_radius;
+
         // Planet center to bottom/top of atmosphere
         float bottom_radius;
         float top_radius;
         // Density profiles
         DensityProfile rayleigh_density;
+
         Vector3 rayleigh_scattering; // spectral scattering at bottom
+
         DensityProfile mie_density;
+
         Vector3 mie_scattering;      // spectral scattering at bottom
         Vector3 mie_extinction;      // spectral extinction at bottom
         float mie_phase_function_g;            // asymmetry parameter g
+
         DensityProfile absorption_density;
+
         Vector3 absorption_extinction;
         Vector3 ground_albedo;
         float mu_s_min; // cosine of max Sun zenith angle to precompute
@@ -77,7 +83,7 @@ namespace Atmosphere
         LookUpTablesInfo() { updateDerivedData(); }
     };
 
-    const unsigned int MultiScatteringLUTRes = 32;
+    // const unsigned int MultiScatteringLUTRes = 32;
 
     struct alignas(16) AtmosphereCB
     {
@@ -106,15 +112,15 @@ namespace Atmosphere
         float mie_density[12];
         float absorption_density[12];
 
-        int TRANSMITTANCE_TEXTURE_WIDTH;
-        int TRANSMITTANCE_TEXTURE_HEIGHT;
-        int IRRADIANCE_TEXTURE_WIDTH;
-        int IRRADIANCE_TEXTURE_HEIGHT;
+        // int TRANSMITTANCE_TEXTURE_WIDTH;
+        // int TRANSMITTANCE_TEXTURE_HEIGHT;
+        // int IRRADIANCE_TEXTURE_WIDTH;
+        // int IRRADIANCE_TEXTURE_HEIGHT;
 
-        int SCATTERING_TEXTURE_R_SIZE;
-        int SCATTERING_TEXTURE_MU_SIZE;
-        int SCATTERING_TEXTURE_MU_S_SIZE;
-        int SCATTERING_TEXTURE_NU_SIZE;
+        // int SCATTERING_TEXTURE_R_SIZE;
+        // int SCATTERING_TEXTURE_MU_SIZE;
+        // int SCATTERING_TEXTURE_MU_S_SIZE;
+        // int SCATTERING_TEXTURE_NU_SIZE;
 
         DirectX::XMFLOAT3 SKY_SPECTRAL_RADIANCE_TO_LUMINANCE;
         float pad3;
@@ -142,28 +148,32 @@ namespace Atmosphere
 
     struct CommonConstantBufferStructure
     {
-        Matrix gViewProjMat;
+        Matrix viewProjMat;
 
-        Vector4 gColor;
+        Vector4 color;
 
-        Vector3 gSunIlluminance;
-        int gScatteringMaxPathDepth;
+        Vector3 sunIlluminance;
+        int scatteringMaxPathDepth;
 
-        unsigned int gResolution[2];
-        float gFrameTimeSec;
-        float gTimeSec;
+        float frameTimeSec;
+        float timeSec;
+        unsigned int mouseLastDownPos[2];
 
-        unsigned int gMouseLastDownPos[2];
-        unsigned int gFrameId;
-        unsigned int gTerrainResolution;
+        unsigned int frameId;
+        unsigned int terrainResolution;
+        float rayMarchMinMaxSPP[2];
 
-        float RayMarchMinMaxSPP[2];
-        unsigned int gGameResolution[2];
+        unsigned int gameResolution[2];
+        unsigned int transmittanceLutResolution[2];
 
-        unsigned int gRayMarchingResolution[2];
-        unsigned int gCameraVolumeResolution[2];
+        unsigned int multiScatLutResolution[2];
+        unsigned int skyViewLutResolution[2];
 
-        float gScreenshotCaptureActive;
+        unsigned int aerialPerpspectiveLutResolution[3];
+        float screenshotCaptureActive;
+        
+        unsigned int rayMarchingResolution[2];
+        float pad[2];
     };
 
     class SkyAtmosphere
@@ -228,8 +238,12 @@ namespace Atmosphere
 
         CommonConstantBufferStructure mCommonConstanants;
 
-        SkyAtmosphere(const std::shared_ptr<GDevice>& device);
+        SkyAtmosphere(const std::shared_ptr<GDevice>& device,
+			UINT screenWidth = 1920, UINT screenHeight = 1080);
 
+        void OnResize(const UINT newScreenWidth, const UINT newScreenHeight);
+
+        void InitAtmosphereData();
         void SetupEarthAtmosphere();
 
         void InitRootSignatures();

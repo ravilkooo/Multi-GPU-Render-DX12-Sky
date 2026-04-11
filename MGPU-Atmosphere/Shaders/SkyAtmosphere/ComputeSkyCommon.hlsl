@@ -135,7 +135,9 @@ float fromSubUvsToUnit(float u, float resolution)
 
 void UvToLutTransmittanceParams(AtmosphereParameters Atmosphere, out float viewHeight, out float viewZenithCosAngle, in float2 uv)
 {
-	//uv = float2(fromSubUvsToUnit(uv.x, TRANSMITTANCE_TEXTURE_WIDTH), fromSubUvsToUnit(uv.y, TRANSMITTANCE_TEXTURE_HEIGHT)); // No real impact so off
+    // No real impact so off
+    // Ravil: For sure???
+	//uv = float2(fromSubUvsToUnit(uv.x, TRANSMITTANCE_TEXTURE_WIDTH), fromSubUvsToUnit(uv.y, TRANSMITTANCE_TEXTURE_HEIGHT));
     float x_mu = uv.x;
     float x_r = uv.y;
 		
@@ -153,8 +155,9 @@ void UvToLutTransmittanceParams(AtmosphereParameters Atmosphere, out float viewH
 #define NONLINEARSKYVIEWLUT 1
 void UvToSkyViewLutParams(AtmosphereParameters Atmosphere, out float viewZenithCosAngle, out float lightViewCosAngle, in float viewHeight, in float2 uv)
 {
+    float2 skyViewRes = float2(gSkyViewLutResolution);
 	// Constrain uvs to valid sub texel range (avoid zenith derivative issue making LUT usage visible)
-    uv = float2(fromSubUvsToUnit(uv.x, 192.0f), fromSubUvsToUnit(uv.y, 108.0f));
+    uv = float2(fromSubUvsToUnit(uv.x, skyViewRes.x), fromSubUvsToUnit(uv.y, skyViewRes.y));
 
     float Vhorizon = sqrt(viewHeight * viewHeight - Atmosphere.BottomRadius * Atmosphere.BottomRadius);
     float CosBeta = Vhorizon / viewHeight; // GroundToHorizonCos
@@ -187,6 +190,7 @@ void UvToSkyViewLutParams(AtmosphereParameters Atmosphere, out float viewZenithC
 
 void SkyViewLutParamsToUv(AtmosphereParameters Atmosphere, in bool IntersectGround, in float viewZenithCosAngle, in float lightViewCosAngle, in float viewHeight, out float2 uv)
 {
+    float2 skyViewRes = float2(gSkyViewLutResolution);
     float Vhorizon = sqrt(viewHeight * viewHeight - Atmosphere.BottomRadius * Atmosphere.BottomRadius);
     float CosBeta = Vhorizon / viewHeight; // GroundToHorizonCos
     float Beta = acos(CosBeta);
@@ -218,7 +222,7 @@ void SkyViewLutParamsToUv(AtmosphereParameters Atmosphere, in bool IntersectGrou
     }
 
 	// Constrain uvs to valid sub texel range (avoid zenith derivative issue making LUT usage visible)
-    uv = float2(fromUnitToSubUvs(uv.x, 192.0f), fromUnitToSubUvs(uv.y, 108.0f));
+    uv = float2(fromUnitToSubUvs(uv.x, skyViewRes.x), fromUnitToSubUvs(uv.y, skyViewRes.y));
 }
 
 
