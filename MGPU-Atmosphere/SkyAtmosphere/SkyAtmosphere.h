@@ -7,6 +7,8 @@
 #include "GTexture.h"
 #include "GDescriptor.h"
 
+#include "SkyAtmosphereBuffersData.h"
+
 using namespace DirectX::SimpleMath;
 
 using namespace PEPEngine;
@@ -84,102 +86,10 @@ namespace Atmosphere
         LookUpTablesInfo() { updateDerivedData(); }
     };
 
-    // const unsigned int MultiScatteringLUTRes = 32;
-
-    struct alignas(16) AtmosphereCB
-    {
-        DirectX::XMFLOAT3 solar_irradiance;
-        float sun_angular_radius;
-
-        DirectX::XMFLOAT3 absorption_extinction;
-        float mu_s_min;
-
-        DirectX::XMFLOAT3 rayleigh_scattering;
-        float mie_phase_function_g;
-
-        DirectX::XMFLOAT3 mie_scattering;
-        float bottom_radius;
-
-        DirectX::XMFLOAT3 mie_extinction;
-        float top_radius;
-
-        DirectX::XMFLOAT3 mie_absorption;
-        float pad00;
-
-        DirectX::XMFLOAT3 ground_albedo;
-        float pad0;
-
-        float rayleigh_density[12];
-        float mie_density[12];
-        float absorption_density[12];
-
-        // int TRANSMITTANCE_TEXTURE_WIDTH;
-        // int TRANSMITTANCE_TEXTURE_HEIGHT;
-        // int IRRADIANCE_TEXTURE_WIDTH;
-        // int IRRADIANCE_TEXTURE_HEIGHT;
-
-        // int SCATTERING_TEXTURE_R_SIZE;
-        // int SCATTERING_TEXTURE_MU_SIZE;
-        // int SCATTERING_TEXTURE_MU_S_SIZE;
-        // int SCATTERING_TEXTURE_NU_SIZE;
-
-        DirectX::XMFLOAT3 SKY_SPECTRAL_RADIANCE_TO_LUMINANCE;
-        float pad3;
-        DirectX::XMFLOAT3 SUN_SPECTRAL_RADIANCE_TO_LUMINANCE;
-        float pad4;
-
-        DirectX::XMFLOAT4X4 gSkyViewProjMat;
-        DirectX::XMFLOAT4X4 gSkyInvViewProjMat;
-        DirectX::XMFLOAT4X4 gSkyInvProjMat;
-        DirectX::XMFLOAT4X4 gSkyInvViewMat;
-        DirectX::XMFLOAT4X4 gShadowmapViewProjMat;
-
-        DirectX::XMFLOAT3 camera;
-        float pad5;
-        DirectX::XMFLOAT3 sun_direction;
-        float pad6;
-        DirectX::XMFLOAT3 view_ray;
-        float pad7;
-
-        float MultipleScatteringFactor;
-        float MultiScatteringLUTRes;
-        float pad9;
-        float pad10;
-    };
-
-    struct CommonConstantBufferStructure
-    {
-        Matrix viewProjMat;
-
-        Vector4 color;
-
-        Vector3 sunIlluminance;
-        int scatteringMaxPathDepth;
-
-        float frameTimeSec;
-        float timeSec;
-        unsigned int mouseLastDownPos[2];
-
-        unsigned int frameId;
-        unsigned int terrainResolution;
-        float rayMarchMinMaxSPP[2];
-
-        unsigned int gameResolution[2];
-        unsigned int transmittanceLutResolution[2];
-
-        unsigned int multiScatLutResolution[2];
-        unsigned int skyViewLutResolution[2];
-
-        unsigned int aerialPerpspectiveLutResolution[3];
-        float screenshotCaptureActive;
-        
-        unsigned int rayMarchingResolution[2];
-        float pad[2];
-    };
-
     class SkyAtmosphere
     {
         std::shared_ptr<GDevice> mDevice;
+        std::shared_ptr<GDevice> mSecondDevice;
         std::shared_ptr<GRootSignature> mRootSignature;
 
         custom_unordered_map<std::string, std::shared_ptr<GShader>> mAtmosphereShaders =
@@ -227,9 +137,6 @@ namespace Atmosphere
 		std::shared_ptr<GTexture> mHeightMapTex;
 		GDescriptor mHeightMapTexSrv;
 
-        std::shared_ptr<ConstantUploadBuffer<AtmosphereCB>> mAtmosphereCB;
-        std::shared_ptr<ConstantUploadBuffer<CommonConstantBufferStructure>> mCommonCB;
-
 		struct TerrainDataBufferStructure
 		{
 			Matrix viewProjMat;
@@ -273,7 +180,7 @@ namespace Atmosphere
         int viewRayMarchMinSPP = 4;
         int viewRayMarchMaxSPP = 14;
 
-        CommonConstantBufferStructure mCommonConstanants;
+        AtmosphereCommonConstants mCommonConstanants;
 
         SkyAtmosphere(const std::shared_ptr<GDevice>& device,
 			UINT screenWidth = 1920, UINT screenHeight = 1080, uint32_t terrainResolution = 512u);
@@ -297,7 +204,9 @@ namespace Atmosphere
         void LoadAerialPerpspectiveLutResource();
         void LoadRayMarchingResource();
 
-        void UpdateSkyAtmosphereBuffer();
+		void UpdateSkyAtmosphereBuffer(
+            const std::shared_ptr<ConstantUploadBuffer<AtmosphereCommonConstants>>& AtmosphereCommonConstantsCB,
+			const std::shared_ptr<ConstantUploadBuffer<AtmosphereConstants>>& AtmosphereConstantsCB);
         void UpdateTerrain();
 
         std::shared_ptr<GTexture> GetRayMarchTexture();
@@ -318,8 +227,14 @@ namespace Atmosphere
         */
 
 
-        void PopulateTerrainCommands(const std::shared_ptr<GCommandList>& cmdList);
-        void PopulateTransmittanceLutCommands(const std::shared_ptr<GCommandList>& cmdList);
+		void PopulateTerrainCommands(const std::shared_ptr<GCommandList>& cmdList,
+			const std::shared_ptr<ConstantUploadBuffer<AtmosphereCommonConstants>>& AtmosphereCommonConstantsCB,
+			const std::shared_ptr<ConstantUploadBuffer<AtmosphereConstants>>& AtmosphereConstantsCB);
+
+		void PopulateTransmittanceLutCommands(const std::shared_ptr<GCommandList>& cmdList,
+			const std::shared_ptr<ConstantUploadBuffer<AtmosphereCommonConstants>>& AtmosphereCommonConstantsCB,
+            const std::shared_ptr<ConstantUploadBuffer<AtmosphereConstants>>& AtmosphereConstantsCB);
+
         void PopulateMultiScatLutCommands(const std::shared_ptr<GCommandList>& cmdList);
         void PopulateSkyViewLutCommands(const std::shared_ptr<GCommandList>& cmdList);
         void PopulateAerialPerspectiveCommands(const std::shared_ptr<GCommandList>& cmdList);

@@ -190,15 +190,21 @@ void HybridAtmosphereApp::UpdateAtmosphere()
     skyAtmosphere->mCommonConstanants.timeSec = timer.TotalTime();
     skyAtmosphere->mCommonConstanants.frameId = gFrameId;
     skyAtmosphere->mCommonConstanants.screenshotCaptureActive = false;
-    skyAtmosphere->UpdateSkyAtmosphereBuffer();
+    skyAtmosphere->UpdateSkyAtmosphereBuffer(
+        currentFrameResource->PrimeAtmosphereCommonUploadBuffer,
+        currentFrameResource->PrimeAtmosphereUploadBuffer);
 }
 
 void HybridAtmosphereApp::PopulateAtmosphereCommands(const std::shared_ptr<GCommandList>& cmdList)
 {
-    skyAtmosphere->PopulateTransmittanceLutCommands(cmdList);
+	skyAtmosphere->PopulateTransmittanceLutCommands(cmdList,
+		currentFrameResource->PrimeAtmosphereCommonUploadBuffer,
+		currentFrameResource->PrimeAtmosphereUploadBuffer);
 
     // Must be before RayMarchingCommands
-    skyAtmosphere->PopulateTerrainCommands(cmdList);
+	skyAtmosphere->PopulateTerrainCommands(cmdList,
+		currentFrameResource->PrimeAtmosphereCommonUploadBuffer,
+		currentFrameResource->PrimeAtmosphereUploadBuffer);
 
     skyAtmosphere->PopulateMultiScatLutCommands(cmdList);
     skyAtmosphere->PopulateSkyViewLutCommands(cmdList);

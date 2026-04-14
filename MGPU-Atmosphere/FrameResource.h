@@ -4,6 +4,8 @@
 #include "ShaderBuffersData.h"
 #include "GTexture.h"
 
+#include "SkyAtmosphere/SkyAtmosphereBuffersData.h"
+
 struct HBAOConstants;
 using namespace PEPEngine;
 using namespace Graphics;
@@ -23,8 +25,13 @@ struct FrameResource
     std::shared_ptr<ConstantUploadBuffer<PassConstants>> PrimePassConstantUploadBuffer;
 
     std::shared_ptr<ConstantUploadBuffer<SsaoConstants>> PrimeSsaoConstantUploadBuffer;
-
     std::shared_ptr<ConstantUploadBuffer<HBAOConstants>> PrimeHBAOConstantUploadBuffer;
+
+	std::shared_ptr<ConstantUploadBuffer<AtmosphereConstants>> PrimeAtmosphereUploadBuffer;
+	std::shared_ptr<ConstantUploadBuffer<AtmosphereCommonConstants>> PrimeAtmosphereCommonUploadBuffer;
+
+	std::shared_ptr<ConstantUploadBuffer<AtmosphereConstants>> SecondAtmosphereUploadBuffer;
+	std::shared_ptr<ConstantUploadBuffer<AtmosphereCommonConstants>> SecondAtmosphereCommonUploadBuffer;
 
     std::shared_ptr<StructuredUploadBuffer<MaterialConstants>> MaterialBuffer;
 

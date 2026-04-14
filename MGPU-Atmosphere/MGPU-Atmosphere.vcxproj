@@ -201,6 +201,7 @@
     <ClInclude Include="SharedHBAO.h" />
     <ClInclude Include="SharedSSAO.h" />
     <ClInclude Include="SkyAtmosphere\SkyAtmosphere.h" />
+    <ClInclude Include="SkyAtmosphere\SkyAtmosphereBuffersData.h" />
     <ClInclude Include="SkyAtmosphere\SkyAtmosphereRenderer.h" />
     <ClInclude Include="UILayer.h" />
   </ItemGroup>

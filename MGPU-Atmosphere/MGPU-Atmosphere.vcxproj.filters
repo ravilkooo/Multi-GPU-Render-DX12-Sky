@@ -53,6 +53,9 @@
     <ClInclude Include="SkyAtmosphere\SkyAtmosphereRenderer.h">
       <Filter>SkyAtmosphere</Filter>
     </ClInclude>
+    <ClInclude Include="SkyAtmosphere\SkyAtmosphereBuffersData.h">
+      <Filter>SkyAtmosphere</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />

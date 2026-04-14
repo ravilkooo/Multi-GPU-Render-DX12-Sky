@@ -16,6 +16,22 @@ FrameResource::FrameResource(std::shared_ptr<GDevice> primeDevices, std::shared_
     MaterialBuffer = std::make_shared<StructuredUploadBuffer<MaterialConstants>>(
         primeDevices, materialCount, primeDevices->GetName() + L" Material Data Buffer ");
 
+    /*
+    * Atmosphere Buffers
+    */
+
+    PrimeAtmosphereUploadBuffer = std::make_shared<ConstantUploadBuffer<AtmosphereConstants>>(
+        primeDevices, 1, primeDevices->GetName() + L" SkyAtmosphere CB");
+
+    SecondAtmosphereUploadBuffer = std::make_shared<ConstantUploadBuffer<AtmosphereConstants>>(
+        secondDevice, 1, secondDevice->GetName() + L" SkyAtmosphere CB");
+
+    PrimeAtmosphereCommonUploadBuffer = std::make_shared<ConstantUploadBuffer<AtmosphereCommonConstants>>(
+        primeDevices, 1, primeDevices->GetName() + L" SkyAtmosphereCommon CB");
+
+	SecondAtmosphereCommonUploadBuffer = std::make_shared<ConstantUploadBuffer<AtmosphereCommonConstants>>(
+        secondDevice, 1, secondDevice->GetName() + L" SkyAtmosphereCommon CB");
+
     BackBufferRTVMemory = (primeDevices->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_RTV));
 }
 

@@ -90,13 +90,15 @@ void Atmosphere::SkyAtmosphere::InitAtmosphereData()
 void Atmosphere::SkyAtmosphere::SetupEarthAtmosphere()
 {
     // Ensure constant buffers exist and are populated before dispatching LUT passes
-    mAtmosphereCB = std::make_shared<ConstantUploadBuffer<AtmosphereCB>>(mDevice, 1, L"SkyAtmosphere CB");
-    AtmosphereCB cb{};
-    memset(&cb, 0xBA, sizeof(AtmosphereCB));
+    /*
+    mAtmosphereCB = 
+    AtmosphereConstants cb{};
+    memset(&cb, 0xBA, sizeof(AtmosphereConstants));
     mAtmosphereCB->CopyData(0, cb);
 
-    mCommonCB = std::make_shared<ConstantUploadBuffer<CommonConstantBufferStructure>>(mDevice, 1, L"CommonConstantsCB CB");
+    mCommonCB = std::make_shared<ConstantUploadBuffer<AtmosphereCommonConstants>>(mDevice, 1, L"CommonConstantsCB CB");
     mCommonCB->CopyData(0, mCommonConstanants);
+    */
 }
 
 void Atmosphere::SkyAtmosphere::InitRootSignatures()
@@ -669,7 +671,9 @@ void Atmosphere::SkyAtmosphere::LoadRayMarchingResource()
     mRayMarchingResult->CreateShaderResourceView(&srvDesc, &mRayMarchingResultSRV);
 }
 
-void Atmosphere::SkyAtmosphere::PopulateTerrainCommands(const std::shared_ptr<GCommandList>& cmdList)
+void Atmosphere::SkyAtmosphere::PopulateTerrainCommands(const std::shared_ptr<GCommandList>& cmdList,
+	const std::shared_ptr<ConstantUploadBuffer<AtmosphereCommonConstants>>& AtmosphereCommonConstantsCB,
+	const std::shared_ptr<ConstantUploadBuffer<AtmosphereConstants>>& AtmosphereConstantsCB)
 {
 	cmdList->StartMark(L"Terrain Draw");
 
@@ -694,8 +698,8 @@ void Atmosphere::SkyAtmosphere::PopulateTerrainCommands(const std::shared_ptr<GC
     // 13th root parameter
     cmdList->SetGraphicsRootDescriptorTable(13, &mHeightMapTexSrv);
 
-	cmdList->SetRootConstantBufferView((UINT)CBSlots::Common, *mCommonCB);
-	cmdList->SetRootConstantBufferView((UINT)CBSlots::Atmosphere, *mAtmosphereCB);
+	cmdList->SetRootConstantBufferView((UINT)CBSlots::Common, *AtmosphereCommonConstantsCB);
+	cmdList->SetRootConstantBufferView((UINT)CBSlots::Atmosphere, *AtmosphereConstantsCB);
 	// 14th root parameter
 	cmdList->SetRootConstantBufferView(14, *mTerrainCB, 0);
 
@@ -710,7 +714,9 @@ void Atmosphere::SkyAtmosphere::PopulateTerrainCommands(const std::shared_ptr<GC
 	cmdList->EndMark();
 }
 
-void Atmosphere::SkyAtmosphere::PopulateTransmittanceLutCommands(const std::shared_ptr<GCommandList>& cmdList)
+void Atmosphere::SkyAtmosphere::PopulateTransmittanceLutCommands(const std::shared_ptr<GCommandList>& cmdList,
+	const std::shared_ptr<ConstantUploadBuffer<AtmosphereCommonConstants>>& AtmosphereCommonConstantsCB,
+	const std::shared_ptr<ConstantUploadBuffer<AtmosphereConstants>>& AtmosphereConstantsCB)
 {
     if (!mTransmittanceLut || !mTransmittanceLut->GetD3D12Resource())
         return;
@@ -726,8 +732,8 @@ void Atmosphere::SkyAtmosphere::PopulateTransmittanceLutCommands(const std::shar
     cmdList->SetComputeRootSignature(*mRootSignature);
     cmdList->SetPipelineState(*mAtmospherePSOs["transmittance"]);
     
-    cmdList->SetComputeRootConstantBufferView((UINT)CBSlots::Common, *mCommonCB);
-    cmdList->SetComputeRootConstantBufferView((UINT)CBSlots::Atmosphere, *mAtmosphereCB);
+    cmdList->SetComputeRootConstantBufferView((UINT)CBSlots::Common, *AtmosphereCommonConstantsCB);
+    cmdList->SetComputeRootConstantBufferView((UINT)CBSlots::Atmosphere, *AtmosphereConstantsCB);
 
     cmdList->SetComputeRootDescriptorTable((UINT)CBSlots::Count + (UINT)TextureSlots::Count + (UINT)UavSlots::Transmittance,
         &mTransmittanceLutUAV);
@@ -880,12 +886,14 @@ void Atmosphere::SkyAtmosphere::PopulateRayMarchingCommands(const std::shared_pt
     cmdList->EndMark();
 }
 
-void Atmosphere::SkyAtmosphere::UpdateSkyAtmosphereBuffer()
+void Atmosphere::SkyAtmosphere::UpdateSkyAtmosphereBuffer(
+	const std::shared_ptr<ConstantUploadBuffer<AtmosphereCommonConstants>>& AtmosphereCommonConstantsCB,
+	const std::shared_ptr<ConstantUploadBuffer<AtmosphereConstants>>& AtmosphereConstantsCB)
 {
-    // Populate AtmosphereCB with sensible defaults / current values and upload to GPU
-    AtmosphereCB cb;
+    // Populate AtmosphereConstants with sensible defaults / current values and upload to GPU
+    AtmosphereConstants cb;
     // Fill with a pattern like the original project to help detect uninitialized fields in debug
-    //memset(&cb, 0xBA, sizeof(AtmosphereCB));
+    //memset(&cb, 0xBA, sizeof(AtmosphereConstants));
 
     // Match initialization values used in InitTransmittanceLutPass and Game::updateSkyAtmosphereConstant
     cb.solar_irradiance = mAtmosphereInfos.solar_irradiance;
@@ -945,16 +953,16 @@ void Atmosphere::SkyAtmosphere::UpdateSkyAtmosphereBuffer()
     cb.sun_direction = mSunDir;
 
 
-    if (mAtmosphereCB)
-        mAtmosphereCB->CopyData(0, cb);
+    if (AtmosphereConstantsCB)
+        AtmosphereConstantsCB->CopyData(0, cb);
 
     viewRayMarchMaxSPP = viewRayMarchMinSPP >= viewRayMarchMaxSPP ? viewRayMarchMinSPP + 1 : viewRayMarchMaxSPP;
     mCommonConstanants.rayMarchMinMaxSPP[0] = float(viewRayMarchMinSPP);
     mCommonConstanants.rayMarchMinMaxSPP[1] = float(viewRayMarchMaxSPP);
     mCommonConstanants.terrainResolution = mTerrainResolution;
 
-    if (mCommonCB)
-        mCommonCB->CopyData(0, mCommonConstanants);
+    if (AtmosphereCommonConstantsCB)
+        AtmosphereCommonConstantsCB->CopyData(0, mCommonConstanants);
 }
 
 void Atmosphere::SkyAtmosphere::UpdateTerrain()
