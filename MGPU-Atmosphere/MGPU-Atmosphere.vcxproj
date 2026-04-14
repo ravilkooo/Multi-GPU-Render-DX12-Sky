@@ -164,8 +164,8 @@
     <ClCompile Include="SharedHBAO.cpp" />
     <ClCompile Include="SharedSSAO.cpp" />
     <ClCompile Include="SkyAtmosphere\SkyAtmosphere.cpp" />
+    <ClCompile Include="SkyAtmosphere\SkyAtmosphereRenderer.cpp" />
     <ClCompile Include="Source.cpp" />
-    <ClCompile Include="TerrainRenderer.cpp" />
     <ClCompile Include="UILayer.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -201,7 +201,7 @@
     <ClInclude Include="SharedHBAO.h" />
     <ClInclude Include="SharedSSAO.h" />
     <ClInclude Include="SkyAtmosphere\SkyAtmosphere.h" />
-    <ClInclude Include="TerrainRenderer.h" />
+    <ClInclude Include="SkyAtmosphere\SkyAtmosphereRenderer.h" />
     <ClInclude Include="UILayer.h" />
   </ItemGroup>
   <ItemGroup>
@@ -243,6 +243,16 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="Shaders\SkyAtmosphere\ComputeSkyRayMarching.hlsl">
+      <FileType>Document</FileType>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Shaders\SkyAtmosphere\PostProcess.hlsl">
+      <FileType>Document</FileType>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Shaders\Common.hlsl">
       <FileType>Document</FileType>
     </None>
   </ItemGroup>

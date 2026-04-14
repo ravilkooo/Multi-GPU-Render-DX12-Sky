@@ -53,13 +53,14 @@ protected:
     void LoadCustomMaterials();
     void CreateCustomGO();
 
-    void LoadTerrainShader();
-    void LoadTerrainPSO(std::shared_ptr<GRootSignature> rootSignature,
+    void LoadAtmospherePostProcessShader();
+    void LoadAtmospherePostProcessPSO(std::shared_ptr<GRootSignature> rootSignature,
         D3D12_INPUT_LAYOUT_DESC defautlInputDesc, DXGI_FORMAT backBufferFormat,
         DXGI_FORMAT depthStencilFormat);
-    void LoadTerrainTexture();
-    void LoadTerrainMaterials();
-    void CreateTerrainGO();
+	void CreateAtmosphereGO();
+
+	void UpdateTerrain();
+	void UpdateAtmosphere();
 
     std::shared_ptr<Atmosphere::SkyAtmosphere> skyAtmosphere;
     unsigned int gFrameId;

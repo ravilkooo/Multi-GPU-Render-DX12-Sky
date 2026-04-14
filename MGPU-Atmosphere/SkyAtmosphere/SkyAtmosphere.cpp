@@ -1,10 +1,13 @@
+#include "d3dApp.h"
 #include "SkyAtmosphere.h"
 #include <string>
+#include "../CustomShaderLoader/GShaderCustomInclude.h"
 
 Atmosphere::SkyAtmosphere::SkyAtmosphere(const std::shared_ptr<GDevice>& device,
-    UINT screenWidth, UINT screenHeight)
+	UINT screenWidth, UINT screenHeight, uint32_t terrainResolution)
+	: mScreenWidth(screenWidth), mScreenHeight(screenHeight),
+    mDevice(device), mTerrainResolution(terrainResolution)
 {
-	mDevice = device;
 
     InitAtmosphereData();
     LoadResources();
@@ -80,6 +83,8 @@ void Atmosphere::SkyAtmosphere::InitAtmosphereData()
 
 	mCommonConstanants.rayMarchMinMaxSPP[0] = float(viewRayMarchMinSPP);
 	mCommonConstanants.rayMarchMinMaxSPP[1] = float(viewRayMarchMaxSPP);
+
+    mCamPosFinal = Vector3::Zero;
 }
 
 void Atmosphere::SkyAtmosphere::SetupEarthAtmosphere()
@@ -96,7 +101,7 @@ void Atmosphere::SkyAtmosphere::SetupEarthAtmosphere()
 
 void Atmosphere::SkyAtmosphere::InitRootSignatures()
 {
-    // Build a dedicated root signature for the transmittance pass (it needs b1 and b2 CBs)
+    // Build a dedicated root signature for the transmittance pass
     mRootSignature = std::make_shared<GRootSignature>();
     mRootSignature->AddConstantBufferParameter((UINT) CBSlots::Common); // commmon_BUFFER
     mRootSignature->AddConstantBufferParameter((UINT) CBSlots::Atmosphere); // SKYATMOSPHERE_BUFFER
@@ -136,6 +141,11 @@ void Atmosphere::SkyAtmosphere::InitRootSignatures()
     mRootSignature->AddDescriptorParameter(&uavRange2, 1);
     mRootSignature->AddDescriptorParameter(&uavRange3, 1);
     mRootSignature->AddDescriptorParameter(&uavRange4, 1);
+
+	CD3DX12_DESCRIPTOR_RANGE srvHeightMap;
+	srvHeightMap.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0u, 1u); // t0, space1 Terrain HeightMap
+    mRootSignature->AddDescriptorParameter(&srvHeightMap, 1u, D3D12_SHADER_VISIBILITY_VERTEX);
+    mRootSignature->AddConstantBufferParameter(2); // Terrain cb
 
     const CD3DX12_STATIC_SAMPLER_DESC pointClamp(
         0, // shaderRegister
@@ -194,10 +204,23 @@ void Atmosphere::SkyAtmosphere::InitRootSignatures()
 void Atmosphere::SkyAtmosphere::LoadShaders()
 {
     /*
-    std::vector<std::string> dirs{
-    "Shaders",
-    "Shaders/Terrain"
-    };
+    Graphics shaders
+    */
+
+	std::vector<std::string> dirs{
+		"Shaders",
+		"Shaders/SkyAtmosphere",
+		"Shaders/Terrain"
+	};
+
+    mAtmosphereShaders["terrainVS"] = std::move(std::make_shared<GShaderCustomInclude>(2u, dirs,
+        L"Shaders\\Terrain\\Terrain.hlsl", VertexShader, nullptr, "TerrainVS", "vs_5_1"));
+
+    mAtmosphereShaders["terrainPS"] = std::move(std::make_shared<GShaderCustomInclude>(2u, dirs,
+		L"Shaders\\Terrain\\Terrain.hlsl", PixelShader, nullptr, "TerrainPS", "ps_5_1"));
+
+    /*
+    Compute shaders
     */
 
     mAtmosphereShaders["brunetonTransmittanceCS"] = std::move(
@@ -243,6 +266,46 @@ void Atmosphere::SkyAtmosphere::LoadShaders()
 
 void Atmosphere::SkyAtmosphere::InitPSOs()
 {
+    /*
+    Graphics PSO
+    */
+	const D3D12_INPUT_LAYOUT_DESC inputLayoutDesc = { nullptr, 0 };
+
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC terrainPsoDesc;
+
+	ZeroMemory(&terrainPsoDesc, sizeof(D3D12_GRAPHICS_PIPELINE_STATE_DESC));
+	terrainPsoDesc.InputLayout = inputLayoutDesc;
+	terrainPsoDesc.pRootSignature = mRootSignature->GetNativeSignature().Get();
+	terrainPsoDesc.VS = mAtmosphereShaders["terrainVS"]->GetShaderResource();
+	terrainPsoDesc.PS = mAtmosphereShaders["terrainPS"]->GetShaderResource();
+	terrainPsoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
+	terrainPsoDesc.RasterizerState.CullMode = D3D12_CULL_MODE_BACK;
+	// terrainPsoDesc.RasterizerState.DepthClipEnable = false;
+	terrainPsoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
+	terrainPsoDesc.SampleMask = UINT_MAX;
+	terrainPsoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+
+	terrainPsoDesc.NumRenderTargets = 1;
+	terrainPsoDesc.RTVFormats[0] = GetSRGBFormat(BackBufferFormat);
+
+	terrainPsoDesc.SampleDesc.Count = 1;
+	terrainPsoDesc.SampleDesc.Quality = 0;
+
+	terrainPsoDesc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
+
+	terrainPsoDesc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
+	terrainPsoDesc.DepthStencilState.DepthEnable = TRUE;
+	terrainPsoDesc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
+	terrainPsoDesc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_LESS;
+
+    mTerrainPSO = std::make_shared<GraphicPSO>(RenderMode::Terrain);
+    mTerrainPSO->SetPsoDesc(terrainPsoDesc);
+    mTerrainPSO->Initialize(mDevice);
+
+    /*
+    Compute PSOs
+    */
+
     auto transmittancePSO = std::make_shared<ComputePSO>();
     transmittancePSO->SetShader(mAtmosphereShaders["transmittanceCS"].get());
     transmittancePSO->SetRootSignature(*mRootSignature);
@@ -281,11 +344,125 @@ void Atmosphere::SkyAtmosphere::InitPSOs()
 
 void Atmosphere::SkyAtmosphere::LoadResources()
 {
+    LoadTerrainResource();
     LoadTransmittanceLutResource();
     LoadMultiScatLutResource();
     LoadSkyViewLutResource();
     LoadAerialPerpspectiveLutResource();
     LoadRayMarchingResource();
+}
+
+void Atmosphere::SkyAtmosphere::LoadTerrainResource()
+{
+	D3D12_RESOURCE_DESC renderTargetDesc;
+	renderTargetDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+	renderTargetDesc.Alignment = 0;
+	renderTargetDesc.Width = mScreenWidth;
+	renderTargetDesc.Height = mScreenHeight;
+	renderTargetDesc.DepthOrArraySize = 1;
+	renderTargetDesc.MipLevels = 1;
+	renderTargetDesc.Format = BackBufferFormat;
+	renderTargetDesc.SampleDesc.Count = 1;
+	renderTargetDesc.SampleDesc.Quality = 0;
+	renderTargetDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+	renderTargetDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+
+	D3D12_CLEAR_VALUE optClear;
+	optClear = CD3DX12_CLEAR_VALUE(BackBufferFormat, DirectX::Colors::Black);
+
+    terrainRenderTarget = std::make_shared<GTexture>(mDevice, renderTargetDesc,
+        L"Terrain RTV", TextureUsage::RenderTarget, &optClear);
+
+    terrainRenderTargetRTV = mDevice->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, 1);
+    terrainRenderTargetSRV = mDevice->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 1);
+
+	D3D12_RENDER_TARGET_VIEW_DESC rtvDesc = {};
+	rtvDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
+	rtvDesc.Format = BackBufferFormat;
+	rtvDesc.Texture2D.MipSlice = 0;
+	rtvDesc.Texture2D.PlaneSlice = 0;
+    terrainRenderTarget->CreateRenderTargetView(&rtvDesc, &terrainRenderTargetRTV);
+
+	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+	srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+	srvDesc.Format = BackBufferFormat;
+	srvDesc.Texture2D.MostDetailedMip = 0;
+	srvDesc.Texture2D.MipLevels = 1;
+    terrainRenderTarget->CreateShaderResourceView(&srvDesc, &terrainRenderTargetSRV);
+
+
+
+	D3D12_RESOURCE_DESC texDesc;
+	ZeroMemory(&texDesc, sizeof(D3D12_RESOURCE_DESC));
+	texDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+	texDesc.Alignment = 0;
+	texDesc.Width = mScreenWidth;
+	texDesc.Height = mScreenHeight;
+	texDesc.DepthOrArraySize = 1;
+	texDesc.MipLevels = 1;
+	texDesc.SampleDesc.Count = 1;
+	texDesc.SampleDesc.Quality = 0;
+	texDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+	texDesc.Format = DXGI_FORMAT_R32_TYPELESS;
+	texDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
+
+	optClear.Format = DXGI_FORMAT_D32_FLOAT;
+	optClear.DepthStencil.Depth = 1.0f;
+
+    depthMap = std::make_shared<GTexture>(mDevice, texDesc,
+		L"Terrain Depth Map " + mDevice->GetName(),
+		TextureUsage::Depth, &optClear);
+
+	depthMapSRV = mDevice->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 1);
+	depthMapDSV = mDevice->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_DSV, 1);
+
+	D3D12_DEPTH_STENCIL_VIEW_DESC dsvDesc;
+	dsvDesc.Flags = D3D12_DSV_FLAG_NONE;
+	dsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
+	dsvDesc.Format = DXGI_FORMAT_D32_FLOAT;
+	dsvDesc.Texture2D.MipSlice = 0;
+	depthMap->CreateDepthStencilView(&dsvDesc, &depthMapDSV);
+
+	srvDesc = {};
+	srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+	srvDesc.Texture2D.MostDetailedMip = 0;
+	srvDesc.Texture2D.MipLevels = 1;
+	srvDesc.Format = DXGI_FORMAT_R32_FLOAT;
+	depthMap->CreateShaderResourceView(&srvDesc, &depthMapSRV);
+
+	// Height Map
+	auto queue = mDevice->GetCommandQueue(GQueueType::Compute);
+	const auto cmdList = queue->GetCommandList();
+	mHeightMapTex = GTexture::LoadTextureFromFile(L"Data\\Textures\\heightmap.dds", cmdList);
+	mHeightMapTex->SetName(L"heightMapTex");
+	queue->WaitForFenceValue(queue->ExecuteCommandList(cmdList));
+	mDevice->Flush();
+
+	mHeightMapTexSrv = mDevice->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 1);
+
+	srvDesc = {};
+	srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+
+	auto desc = mHeightMapTex->GetD3D12Resource()->GetDesc();
+	srvDesc.Format = GetSRGBFormat(desc.Format);
+	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+	srvDesc.Texture2D.MipLevels = desc.MipLevels;
+	srvDesc.Texture2D.MostDetailedMip = 0;
+	mHeightMapTex->CreateShaderResourceView(&srvDesc, &mHeightMapTexSrv);
+
+	// Terrain CB
+	mTerrainCB = std::make_shared<ConstantUploadBuffer<TerrainDataBufferStructure>>(mDevice, 1, L"TerrainConstantsCB CB");
+
+    mTerrainViewport.Height = static_cast<float>(mScreenHeight);
+    mTerrainViewport.Width = static_cast<float>(mScreenWidth);
+    mTerrainViewport.MinDepth = 0.0f;
+    mTerrainViewport.MaxDepth = 1.0f;
+    mTerrainViewport.TopLeftX = 0;
+    mTerrainViewport.TopLeftY = 0;
+
+	mTerrainScissorRect = { 0, 0, (int) mScreenWidth, (int) mScreenHeight };
 }
 
 void Atmosphere::SkyAtmosphere::LoadTransmittanceLutResource()
@@ -305,7 +482,8 @@ void Atmosphere::SkyAtmosphere::LoadTransmittanceLutResource()
     transDesc.Height = 64; // TRANSMITTANCE_TEXTURE_HEIGHT
     transDesc.Format = DXGI_FORMAT_R32G32B32A32_FLOAT; // transmittance LUT format
 
-    mTransmittanceLut = std::make_shared<GTexture>(mDevice, transDesc, L"TransmittanceLut", TextureUsage::Normalmap);
+    mTransmittanceLut = std::make_shared<GTexture>(mDevice, transDesc,
+        L"TransmittanceLut " + mDevice->GetName(), TextureUsage::Normalmap);
 
     mTransmittanceLutUAV = mDevice->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 1);
     mTransmittanceLutSRV = mDevice->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 1);
@@ -346,7 +524,8 @@ void Atmosphere::SkyAtmosphere::LoadMultiScatLutResource()
     multiscatDesc.Height = MultiScatteringLUTRes;
     multiscatDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT; // MultiScat LUT format
 
-    mMultiScatLut = std::make_shared<GTexture>(mDevice, multiscatDesc, L"MultiScatLut", TextureUsage::Normalmap);
+    mMultiScatLut = std::make_shared<GTexture>(mDevice, multiscatDesc,
+        L"MultiScatLut " + mDevice->GetName(), TextureUsage::Normalmap);
 
     mMultiScatLutUAV = mDevice->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 1);
     mMultiScatLutSRV = mDevice->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 1);
@@ -385,7 +564,8 @@ void Atmosphere::SkyAtmosphere::LoadSkyViewLutResource()
     skyviewDesc.Height = 108; // SKYVIEW_TEXTURE_HEIGHT
     skyviewDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT; // SkyView LUT format
 
-    mSkyViewLut = std::make_shared<GTexture>(mDevice, skyviewDesc, L"SkyViewLut", TextureUsage::Normalmap);
+    mSkyViewLut = std::make_shared<GTexture>(mDevice, skyviewDesc,
+        L"SkyViewLut " + mDevice->GetName(), TextureUsage::Normalmap);
 
     mSkyViewLutUAV = mDevice->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 1);
     mSkyViewLutSRV = mDevice->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 1);
@@ -426,7 +606,8 @@ void Atmosphere::SkyAtmosphere::LoadAerialPerpspectiveLutResource()
     aerialPerspDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
     aerialPerspDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT; // Aerial Persp LUT format
 
-    mAerialPerpspectiveLut = std::make_shared<GTexture>(mDevice, aerialPerspDesc, L"AerialPerspLut", TextureUsage::Normalmap);
+    mAerialPerpspectiveLut = std::make_shared<GTexture>(mDevice, aerialPerspDesc,
+        L"AerialPerspLut " + mDevice->GetName(), TextureUsage::Normalmap);
 
     mAerialPerpspectiveLutUAV = mDevice->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 1);
     mAerialPerpspectiveLutSRV = mDevice->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 1);
@@ -465,7 +646,8 @@ void Atmosphere::SkyAtmosphere::LoadRayMarchingResource()
     raymarchDesc.Height = 1080;
     raymarchDesc.Format = DXGI_FORMAT_R32G32B32A32_FLOAT; // RayMarching format
 
-    mRayMarchingResult = std::make_shared<GTexture>(mDevice, raymarchDesc, L"RayMarching", TextureUsage::Normalmap);
+    mRayMarchingResult = std::make_shared<GTexture>(mDevice, raymarchDesc,
+        L"RayMarching " + mDevice->GetName(), TextureUsage::Normalmap);
 
     mRayMarchingResultUAV = mDevice->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 1);
     mRayMarchingResultSRV = mDevice->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 1);
@@ -485,6 +667,47 @@ void Atmosphere::SkyAtmosphere::LoadRayMarchingResource()
     srvDesc.Texture2D.MipLevels = 1;
     srvDesc.Texture2D.PlaneSlice = 0;
     mRayMarchingResult->CreateShaderResourceView(&srvDesc, &mRayMarchingResultSRV);
+}
+
+void Atmosphere::SkyAtmosphere::PopulateTerrainCommands(const std::shared_ptr<GCommandList>& cmdList)
+{
+	cmdList->StartMark(L"Terrain Draw");
+
+    cmdList->GetGraphicsCommandList()->SetGraphicsRootSignature(mRootSignature->GetNativeSignature().Get());
+	cmdList->SetPipelineState(*mTerrainPSO);
+	// cmdList->SetDescriptorsHeap(srvTexturesMemory);
+	// cmdList->SetRootShaderResourceView(StandardShaderSlot::MaterialData,
+	// 	*currentFrameResource->MaterialBuffer);
+	// cmdList->SetRootDescriptorTable(StandardShaderSlot::TexturesMap, srvTexturesMemory);
+
+	cmdList->SetViewports(&mTerrainViewport, 1);
+	cmdList->SetScissorRects(&mTerrainScissorRect, 1);
+	cmdList->TransitionBarrier(*depthMap.get(), D3D12_RESOURCE_STATE_DEPTH_WRITE);
+	cmdList->TransitionBarrier(*terrainRenderTarget.get(), D3D12_RESOURCE_STATE_RENDER_TARGET);
+	cmdList->TransitionBarrier(*mTransmittanceLut, D3D12_RESOURCE_STATE_GENERIC_READ);
+	cmdList->FlushResourceBarriers();
+	cmdList->ClearDepthStencil(&depthMapDSV, 0, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0);
+	cmdList->ClearRenderTarget(&terrainRenderTargetRTV, 0);
+	cmdList->SetRenderTargets(1, &terrainRenderTargetRTV, 0, &depthMapDSV);
+    
+    cmdList->SetGraphicsRootDescriptorTable((UINT)CBSlots::Count + (UINT)TextureSlots::Transmittance, &mTransmittanceLutSRV);
+    // 13th root parameter
+    cmdList->SetGraphicsRootDescriptorTable(13, &mHeightMapTexSrv);
+
+	cmdList->SetRootConstantBufferView((UINT)CBSlots::Common, *mCommonCB);
+	cmdList->SetRootConstantBufferView((UINT)CBSlots::Atmosphere, *mAtmosphereCB);
+	// 14th root parameter
+	cmdList->SetRootConstantBufferView(14, *mTerrainCB, 0);
+
+	cmdList->GetGraphicsCommandList()->IASetVertexBuffers(0, 0, nullptr);
+	cmdList->GetGraphicsCommandList()->IASetIndexBuffer(nullptr);
+	cmdList->GetGraphicsCommandList()->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	cmdList->Draw(6, mTerrainResolution * mTerrainResolution);
+
+	cmdList->TransitionBarrier(*terrainRenderTarget.get(), D3D12_RESOURCE_STATE_GENERIC_READ);
+	cmdList->FlushResourceBarriers();
+
+	cmdList->EndMark();
 }
 
 void Atmosphere::SkyAtmosphere::PopulateTransmittanceLutCommands(const std::shared_ptr<GCommandList>& cmdList)
@@ -619,7 +842,7 @@ void Atmosphere::SkyAtmosphere::PopulateAerialPerspectiveCommands(const std::sha
     cmdList->EndMark();
 }
 
-void Atmosphere::SkyAtmosphere::PopulateRayMarchingCommands(const std::shared_ptr<GCommandList>& cmdList, const GDescriptor* depthSRV)
+void Atmosphere::SkyAtmosphere::PopulateRayMarchingCommands(const std::shared_ptr<GCommandList>& cmdList)
 {
     if (!mRayMarchingResult || !mRayMarchingResult->GetD3D12Resource())
         return;
@@ -631,6 +854,7 @@ void Atmosphere::SkyAtmosphere::PopulateRayMarchingCommands(const std::shared_pt
     // cmdList->TransitionBarrier(*mTransmittanceLut, D3D12_RESOURCE_STATE_GENERIC_READ);
     // cmdList->TransitionBarrier(*mMultiScatLut, D3D12_RESOURCE_STATE_GENERIC_READ);
     cmdList->TransitionBarrier(*mAerialPerpspectiveLut, D3D12_RESOURCE_STATE_GENERIC_READ);
+    cmdList->TransitionBarrier(*depthMap, D3D12_RESOURCE_STATE_GENERIC_READ);
     cmdList->TransitionBarrier(*mRayMarchingResult, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
     cmdList->FlushResourceBarriers();
 
@@ -638,7 +862,7 @@ void Atmosphere::SkyAtmosphere::PopulateRayMarchingCommands(const std::shared_pt
     cmdList->SetPipelineState(*mAtmospherePSOs["raymarch"]);
 
     cmdList->SetComputeRootDescriptorTable((UINT)CBSlots::Count + (UINT)TextureSlots::Aerial, &mAerialPerpspectiveLutSRV);
-    cmdList->SetComputeRootDescriptorTable((UINT)CBSlots::Count + (UINT)TextureSlots::Depth, depthSRV);
+    cmdList->SetComputeRootDescriptorTable((UINT)CBSlots::Count + (UINT)TextureSlots::Depth, &depthMapSRV);
 
     cmdList->SetComputeRootDescriptorTable((UINT)CBSlots::Count + (UINT)TextureSlots::Count + (UINT)UavSlots::RayMarching,
         &mRayMarchingResultUAV);
@@ -651,7 +875,7 @@ void Atmosphere::SkyAtmosphere::PopulateRayMarchingCommands(const std::shared_pt
     auto tgy = IntDivRoundUp(1080, 32);
     cmdList->Dispatch(tgx, tgy, 1);
 
-    cmdList->TransitionBarrier(*mRayMarchingResult, D3D12_RESOURCE_STATE_COMMON);
+    cmdList->TransitionBarrier(*mRayMarchingResult, D3D12_RESOURCE_STATE_GENERIC_READ);
     cmdList->FlushResourceBarriers();
     cmdList->EndMark();
 }
@@ -727,7 +951,65 @@ void Atmosphere::SkyAtmosphere::UpdateSkyAtmosphereBuffer()
     viewRayMarchMaxSPP = viewRayMarchMinSPP >= viewRayMarchMaxSPP ? viewRayMarchMinSPP + 1 : viewRayMarchMaxSPP;
     mCommonConstanants.rayMarchMinMaxSPP[0] = float(viewRayMarchMinSPP);
     mCommonConstanants.rayMarchMinMaxSPP[1] = float(viewRayMarchMaxSPP);
+    mCommonConstanants.terrainResolution = mTerrainResolution;
 
     if (mCommonCB)
         mCommonCB->CopyData(0, mCommonConstanants);
+}
+
+void Atmosphere::SkyAtmosphere::UpdateTerrain()
+{
+	float dt = Common::D3DApp::GetApp().GetTimer()->DeltaTime();
+    auto& app = static_cast<Common::D3DApp&>(Common::D3DApp::GetApp());
+    auto keyboard = app.GetKeyboard();
+
+	float cameraSpeed = 1.0f;
+	if (keyboard->KeyIsPressed(VK_SHIFT))
+	{
+		cameraSpeed *= 10;
+	}
+	if (keyboard->KeyIsPressed('U'))
+	{
+		terrainPos += Vector3::Up * dt;
+	}
+	if (keyboard->KeyIsPressed('J'))
+	{
+		terrainPos += Vector3::Down * dt;
+	}
+	if (keyboard->KeyIsPressed('H'))
+	{
+		terrainPos += Vector3::Left * dt;
+	}
+	if (keyboard->KeyIsPressed('K'))
+	{
+		terrainPos += Vector3::Right * dt;
+	}
+	if (keyboard->KeyIsPressed('Y'))
+	{
+		terrainPos += Vector3::Forward * dt;
+	}
+	if (keyboard->KeyIsPressed('I'))
+	{
+		terrainPos += Vector3::Backward * dt;
+	}
+
+	mTerrainData.viewProjMat = mViewProjMat;
+	mTerrainData.terrainPosDelta = terrainPos;
+
+	mTerrainCB->CopyData(0, mTerrainData);
+}
+
+std::shared_ptr<PEPEngine::Graphics::GTexture> Atmosphere::SkyAtmosphere::GetRayMarchTexture()
+{
+    return mRayMarchingResult;
+}
+
+PEPEngine::Graphics::GDescriptor* Atmosphere::SkyAtmosphere::GetRayMarchTextureSrv()
+{
+    return &mRayMarchingResultSRV;
+}
+
+PEPEngine::Graphics::GDescriptor* Atmosphere::SkyAtmosphere::GetTerrainRenderSrv()
+{
+    return &terrainRenderTargetSRV;
 }

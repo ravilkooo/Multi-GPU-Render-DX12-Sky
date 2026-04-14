@@ -30,6 +30,7 @@ namespace PEPEngine::Graphics
         UI,
         Particle,
         Terrain, // AtmosphereApp
+        AtmospherePostProcess, // AtmosphereApp
         Count
     };
 

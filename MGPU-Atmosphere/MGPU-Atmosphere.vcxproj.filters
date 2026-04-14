@@ -14,11 +14,13 @@
     <ClCompile Include="SharedSSAO.cpp" />
     <ClCompile Include="Source.cpp" />
     <ClCompile Include="UILayer.cpp" />
-    <ClCompile Include="TerrainRenderer.cpp" />
     <ClCompile Include="CustomShaderLoader\GShaderCustomInclude.cpp">
       <Filter>CustomShaderLoader</Filter>
     </ClCompile>
     <ClCompile Include="SkyAtmosphere\SkyAtmosphere.cpp">
+      <Filter>SkyAtmosphere</Filter>
+    </ClCompile>
+    <ClCompile Include="SkyAtmosphere\SkyAtmosphereRenderer.cpp">
       <Filter>SkyAtmosphere</Filter>
     </ClCompile>
   </ItemGroup>
@@ -36,7 +38,6 @@
     <ClInclude Include="SharedHBAO.h" />
     <ClInclude Include="SharedSSAO.h" />
     <ClInclude Include="UILayer.h" />
-    <ClInclude Include="TerrainRenderer.h" />
     <ClInclude Include="CustomShaderLoader\GShaderCustomInclude.h">
       <Filter>CustomShaderLoader</Filter>
     </ClInclude>
@@ -47,6 +48,9 @@
       <Filter>CustomShaderLoader</Filter>
     </ClInclude>
     <ClInclude Include="SkyAtmosphere\SkyAtmosphere.h">
+      <Filter>SkyAtmosphere</Filter>
+    </ClInclude>
+    <ClInclude Include="SkyAtmosphere\SkyAtmosphereRenderer.h">
       <Filter>SkyAtmosphere</Filter>
     </ClInclude>
   </ItemGroup>
@@ -78,6 +82,12 @@
     </None>
     <None Include="Shaders\SkyAtmosphere\ComputeSkyRayMarching.hlsl">
       <Filter>Shaders\SkyAtmosphere</Filter>
+    </None>
+    <None Include="Shaders\SkyAtmosphere\PostProcess.hlsl">
+      <Filter>Shaders\SkyAtmosphere</Filter>
+    </None>
+    <None Include="Shaders\Common.hlsl">
+      <Filter>Shaders</Filter>
     </None>
   </ItemGroup>
   <ItemGroup>

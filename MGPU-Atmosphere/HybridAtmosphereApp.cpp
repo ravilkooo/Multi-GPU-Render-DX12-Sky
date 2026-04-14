@@ -18,7 +18,7 @@
 #include "Window.h"
 #include "Services/States/WaitState.h"
 
-#include "TerrainRenderer.h"
+#include "SkyAtmosphere/SkyAtmosphereRenderer.h"
 #include "CustomShaderLoader/CustomInclude.h"
 #include "CustomShaderLoader/GShaderCustomInclude.h"
 
@@ -100,116 +100,111 @@ void HybridAtmosphereApp::Update(const GameTimer& gt)
         go->Update();
     }
 
+    UpdateAtmosphere();
+    UpdateTerrain();
+
     UpdateMaterials();
     UpdateShadowTransform(gt);
     UpdateMainPassCB(gt);
     UpdateShadowPassCB(gt);
     UpdateSsaoCB(gt);
     UIPath->Update();
+    
     benchmark.Tick(gt.DeltaTime());
+}
+
+void HybridAtmosphereApp::UpdateTerrain()
+{
+    skyAtmosphere->UpdateTerrain();
+}
+
+void HybridAtmosphereApp::UpdateAtmosphere()
+{
+    float dt = Common::D3DApp::GetApp().GetTimer()->DeltaTime();
+
+	auto& app = static_cast<Common::D3DApp&>(Common::D3DApp::GetApp());
+	auto keyboard = app.GetKeyboard();
+
+	// Vector3 camPos = camera->gameObject->GetTransform()->GetWorldPosition();
+
+	float atmosphereMoveSpeed = 1.0f;
+	if (keyboard->KeyIsPressed(VK_SHIFT))
+	{
+        atmosphereMoveSpeed *= 10;
+	}
+	if (keyboard->KeyIsPressed('O'))
+	{
+        skyAtmosphere->mCamPosFinal.z += atmosphereMoveSpeed * dt;
+	}
+	if (keyboard->KeyIsPressed('L'))
+	{
+        skyAtmosphere->mCamPosFinal.z -= atmosphereMoveSpeed * dt;
+	}
+
+    skyAtmosphere->mShadowmapViewProjMat = shadowPassCB.ViewProj;
+
+    Vector3 forward = camera->gameObject->GetTransform()->GetForwardVector();
+    float viewPitchSin = forward.y;
+    float viewPitchCos_YawSin = forward.x;
+    float viewPitchCos_YawCos = forward.z;
+    float viewPitch = asinf(viewPitchSin);
+    float viewYaw = atan2f(viewPitchCos_YawSin, viewPitchCos_YawCos);
+    Vector3 _viewDir;
+    XMMATRIX BBB = XMMatrixRotationRollPitchYaw(-viewPitch, viewYaw, 0.0f);
+    XMStoreFloat3(&_viewDir, BBB.r[2]);
+    skyAtmosphere->mViewDir = _viewDir;
+    skyAtmosphere->mViewDir.x = -_viewDir.x;
+    skyAtmosphere->mViewDir.y = _viewDir.z;
+    skyAtmosphere->mViewDir.z = _viewDir.y;
+
+    Vector3 tmp = mRotatedLightDirections[0];
+    tmp = -tmp;
+    skyAtmosphere->mSunDir = tmp;
+    skyAtmosphere->mSunDir.x = -tmp.x;
+    skyAtmosphere->mSunDir.y = tmp.z;
+    skyAtmosphere->mSunDir.z = tmp.y;
+
+    {
+        Vector3 focusPosition = skyAtmosphere->mCamPosFinal + skyAtmosphere->mViewDir;
+        Vector3 eyePosition = skyAtmosphere->mCamPosFinal;
+        Vector3 upDirection = Vector3{ 0.0f, 0.0f, 1.0f };	// Unreal z-up
+
+        skyAtmosphere->mViewMat = XMMatrixLookAtLH(eyePosition, focusPosition, upDirection);
+        skyAtmosphere->mProjMat = XMMatrixPerspectiveFovLH(
+            DirectX::XMConvertToRadians(camera->GetFov()),
+            camera->GetAspectRatio(), 0.1f, 20000.0f);
+
+        skyAtmosphere->mViewProjMat = skyAtmosphere->mViewMat * skyAtmosphere->mProjMat;
+    }
+
+    float mSunIlluminanceScale = 1.0f;
+    int NumScatteringOrder = 4;
+
+    skyAtmosphere->mCommonConstanants.viewProjMat = skyAtmosphere->mViewProjMat;
+    skyAtmosphere->mCommonConstanants.color = { 0.0, 1.0, 1.0, 1.0 };
+    skyAtmosphere->mCommonConstanants.gameResolution[0] = uint32_t(MainWindow->GetClientWidth());
+    skyAtmosphere->mCommonConstanants.gameResolution[1] = uint32_t(MainWindow->GetClientHeight());
+    skyAtmosphere->mCommonConstanants.sunIlluminance = { 1.0f * mSunIlluminanceScale, 1.0f * mSunIlluminanceScale, 1.0f * mSunIlluminanceScale };
+    skyAtmosphere->mCommonConstanants.scatteringMaxPathDepth = NumScatteringOrder;
+    skyAtmosphere->mCommonConstanants.frameTimeSec = timer.DeltaTime();
+    skyAtmosphere->mCommonConstanants.timeSec = timer.TotalTime();
+    skyAtmosphere->mCommonConstanants.frameId = gFrameId;
+    skyAtmosphere->mCommonConstanants.screenshotCaptureActive = false;
+    skyAtmosphere->UpdateSkyAtmosphereBuffer();
 }
 
 void HybridAtmosphereApp::PopulateAtmosphereCommands(const std::shared_ptr<GCommandList>& cmdList)
 {
-    GTexture depthMap;
-    const GDescriptor* depthMapSrv;
-
-    if (IsUseHBAO)
-    {
-        const HBAOResources& Resources = hbaoPass->GetPrimeResources();
-        depthMap = Resources.GetDepthMap();
-        depthMapSrv = Resources.GetDepthMapSRV();
-    }
-    else
-    {
-        const SSAOResources& Resources = ssaoPass->GetPrimeResources();
-        depthMap = Resources.GetDepthMap();
-        depthMapSrv = Resources.GetDepthMapSRV();
-    }
-
-    {
-        skyAtmosphere->mShadowmapViewProjMat = shadowPassCB.ViewProj;
-        skyAtmosphere->mViewMat = camera->GetViewMatrix();
-        skyAtmosphere->mProjMat = camera->GetProjectionMatrix();
-        skyAtmosphere->mViewProjMat = skyAtmosphere->mViewMat * skyAtmosphere->mProjMat;
-
-        Vector3 camPos = camera->gameObject->GetTransform()->GetWorldPosition();
-        skyAtmosphere->mCamPosFinal = camPos * 0.001f;
-        skyAtmosphere->mCamPosFinal.y = camPos.z * 0.001f;
-        skyAtmosphere->mCamPosFinal.z = camPos.y * 0.001f;
-
-        Vector3 forward = camera->gameObject->GetTransform()->GetForwardVector();
-        float viewPitchSin = forward.y;
-        float viewPitchCos_YawSin = forward.x;
-        float viewPitchCos_YawCos = forward.z;
-        float viewPitch = asinf(viewPitchSin);
-        float viewYaw = atan2f(viewPitchCos_YawSin, viewPitchCos_YawCos);
-        Vector3 _viewDir;
-        XMMATRIX BBB = XMMatrixRotationRollPitchYaw(-viewPitch, viewYaw, 0.0f);
-        XMStoreFloat3(&_viewDir, BBB.r[2]);
-        skyAtmosphere->mViewDir = _viewDir;
-        skyAtmosphere->mViewDir.x = -_viewDir.x;
-        skyAtmosphere->mViewDir.y = _viewDir.z;
-        skyAtmosphere->mViewDir.z = _viewDir.y;
-
-        /*
-        Vector3 tmp = Vector3::Zero;
-        tmp.y = cos(XM_PIDIV4);
-        tmp.z = cos(XM_PIDIV4);
-        tmp = -tmp;
-        skyAtmosphere->mSunDir = tmp;
-        */
-        //skyAtmosphere->mSunDir.x = -tmp.x;
-        /*
-        skyAtmosphere->mSunDir.x = 0.0f;
-        skyAtmosphere->mSunDir.y = 0.90045f;
-        skyAtmosphere->mSunDir.z = 0.43497f;
-        */
-        Vector3 tmp = mRotatedLightDirections[0];
-        tmp = -tmp;
-        skyAtmosphere->mSunDir = tmp;
-        //skyAtmosphere->mSunDir.x = -tmp.x;
-        skyAtmosphere->mSunDir.x = -tmp.x;
-        skyAtmosphere->mSunDir.y = tmp.z;
-        skyAtmosphere->mSunDir.z = tmp.y;
-
-        {
-            Vector3 focusPosition = skyAtmosphere->mCamPosFinal + skyAtmosphere->mViewDir;
-            Vector3 eyePosition = skyAtmosphere->mCamPosFinal;
-            Vector3 upDirection = Vector3{ 0.0f, 0.0f, 1.0f };	// Unreal z-up
-
-            skyAtmosphere->mViewMat = XMMatrixLookAtLH(eyePosition, focusPosition, upDirection);
-            //mProjMat = XMMatrixPerspectiveFovLH(66.6f * 3.14159f / 180.0f, aspectRatioXOverY, 0.1f, 20000.0f);
-            skyAtmosphere->mProjMat = camera->GetProjectionMatrix();
-
-            // skyAtmosphere->mViewMat = camera->GetViewMatrix();
-            // skyAtmosphere->mProjMat = camera->GetProjectionMatrix();
-            skyAtmosphere->mViewProjMat = skyAtmosphere->mViewMat * skyAtmosphere->mProjMat;
-        }
-
-        float mSunIlluminanceScale = 1.0f;
-        int NumScatteringOrder = 4;
-
-        skyAtmosphere->mCommonConstanants.viewProjMat = skyAtmosphere->mViewProjMat;
-        skyAtmosphere->mCommonConstanants.color = { 0.0, 1.0, 1.0, 1.0 };
-        skyAtmosphere->mCommonConstanants.gameResolution[0] = uint32_t(MainWindow->GetClientWidth());
-        skyAtmosphere->mCommonConstanants.gameResolution[1] = uint32_t(MainWindow->GetClientHeight());
-        skyAtmosphere->mCommonConstanants.sunIlluminance = { 1.0f * mSunIlluminanceScale, 1.0f * mSunIlluminanceScale, 1.0f * mSunIlluminanceScale };
-        skyAtmosphere->mCommonConstanants.scatteringMaxPathDepth = NumScatteringOrder;
-        skyAtmosphere->mCommonConstanants.frameTimeSec = timer.DeltaTime();
-        skyAtmosphere->mCommonConstanants.timeSec = timer.TotalTime();
-        skyAtmosphere->mCommonConstanants.frameId = gFrameId;
-        skyAtmosphere->mCommonConstanants.screenshotCaptureActive = false; // Make sure the terrain or sundisk are not taken into account to focus on the most important part: atmosphere
-    }
-    skyAtmosphere->UpdateSkyAtmosphereBuffer();
     skyAtmosphere->PopulateTransmittanceLutCommands(cmdList);
+
+    // Must be before RayMarchingCommands
+    skyAtmosphere->PopulateTerrainCommands(cmdList);
+
     skyAtmosphere->PopulateMultiScatLutCommands(cmdList);
     skyAtmosphere->PopulateSkyViewLutCommands(cmdList);
     skyAtmosphere->PopulateAerialPerspectiveCommands(cmdList);
-
-    cmdList->TransitionBarrier(depthMap, D3D12_RESOURCE_STATE_GENERIC_READ);
-    skyAtmosphere->PopulateRayMarchingCommands(cmdList, depthMapSrv);
-    cmdList->TransitionBarrier(depthMap, D3D12_RESOURCE_STATE_COMMON);
+    
+	skyAtmosphere->PopulateRayMarchingCommands(cmdList);
 }
 
 void HybridAtmosphereApp::PopulateShadowMapCommands(const std::shared_ptr<GCommandList>& cmdList)
@@ -402,11 +397,15 @@ void HybridAtmosphereApp::PopulateForwardPathCommands(const std::shared_ptr<GCom
         // cmdList->SetPipelineState(*defaultPrimePipelineResources.GetPSO(RenderMode::SkyBox));
         // PopulateDrawCommands(cmdList, (RenderMode::SkyBox));
 
+        cmdList->SetPipelineState(*mCustomAppPSOs[RenderMode::AtmospherePostProcess]);
+        PopulateDrawCommands(cmdList, (RenderMode::AtmospherePostProcess));
+
         cmdList->SetPipelineState(*defaultPrimePipelineResources.GetPSO(RenderMode::Opaque));
         PopulateDrawCommands(cmdList, (RenderMode::Opaque));
 
-        cmdList->SetPipelineState(*mCustomAppPSOs[RenderMode::Terrain]);
-        PopulateDrawCommands(cmdList, RenderMode::Terrain);
+
+        // cmdList->SetPipelineState(*mCustomAppPSOs[RenderMode::Terrain]);
+        // PopulateDrawCommands(cmdList, RenderMode::Terrain);
 
         cmdList->SetPipelineState(*defaultPrimePipelineResources.GetPSO(RenderMode::OpaqueAlphaDrop));
         PopulateDrawCommands(cmdList, (RenderMode::OpaqueAlphaDrop));
@@ -500,10 +499,10 @@ void HybridAtmosphereApp::Draw(const GameTimer& gt)
         emitter->Dispatch(primeCmdList);
     }
 
-    PopulateNormalMapCommands(primeCmdList);
-
+    // Must be before ForwardPathCommands
     PopulateAtmosphereCommands(primeCmdList);
 
+    PopulateNormalMapCommands(primeCmdList);
     PopulateAmbientMapCommands(primeCmdList);
     PopulateShadowMapCommands(primeCmdList);
     PopulateForwardPathCommands(primeCmdList);
@@ -544,9 +543,6 @@ bool HybridAtmosphereApp::Initialize()
     CreateCustomGO();
     SortGO();
     InitFrameResource();
-
-    skyAtmosphere = std::make_shared<Atmosphere::SkyAtmosphere>(primeDevice);
-    gFrameId = 0u;
 
     OnResize();
 
@@ -702,15 +698,15 @@ void HybridAtmosphereApp::InitFrameResource()
 void HybridAtmosphereApp::InitRootSignature()
 {
     auto rootSignature = std::make_shared<GRootSignature>();
-    CD3DX12_DESCRIPTOR_RANGE texParam[5];
+    CD3DX12_DESCRIPTOR_RANGE texParam[6];
     texParam[0].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, StandardShaderSlot::SkyMap - 3, 0); //SkyMap
     texParam[1].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, StandardShaderSlot::ShadowMap - 3, 0); //ShadowMap
     texParam[2].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, StandardShaderSlot::AmbientMap - 3, 0); //SsaoMap
     texParam[3].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
                      assets->GetLoadTexturesCount() > 0 ? assets->GetLoadTexturesCount() : 1,
                      StandardShaderSlot::TexturesMap - 3, 0);
-    texParam[4].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, TerrainRenderer::sHeightMapShaderSlot,
-        TerrainRenderer::sHeightMapShaderSpace); //TerrainHeightmapTex
+    texParam[4].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0u, 2u); // RayMarching Result
+    texParam[5].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 1u, 2u); // Terrain
 
 
     rootSignature->AddConstantBufferParameter(0);
@@ -720,7 +716,8 @@ void HybridAtmosphereApp::InitRootSignature()
     rootSignature->AddDescriptorParameter(&texParam[1], 1, D3D12_SHADER_VISIBILITY_PIXEL);
     rootSignature->AddDescriptorParameter(&texParam[2], 1, D3D12_SHADER_VISIBILITY_PIXEL);
     rootSignature->AddDescriptorParameter(&texParam[3], 1, D3D12_SHADER_VISIBILITY_PIXEL);
-    rootSignature->AddDescriptorParameter(&texParam[4], 1, D3D12_SHADER_VISIBILITY_VERTEX);
+	rootSignature->AddDescriptorParameter(&texParam[4], 1, D3D12_SHADER_VISIBILITY_PIXEL);
+	rootSignature->AddDescriptorParameter(&texParam[5], 1, D3D12_SHADER_VISIBILITY_PIXEL);
     rootSignature->Initialize(primeDevice);
 
     primeDeviceSignature = rootSignature;
@@ -909,6 +906,7 @@ void HybridAtmosphereApp::LoadModels()
     auto queue = primeDevice->GetCommandQueue(GQueueType::Compute);
     auto cmdList = queue->GetCommandList();
 
+    /*
     auto nano = assets->CreateModelFromFile(cmdList, "Data\\Objects\\Nanosuit\\Nanosuit.obj");
     models[L"nano"] = std::move(nano);
 
@@ -930,6 +928,7 @@ void HybridAtmosphereApp::LoadModels()
         cmdList, "Data\\Objects\\DesertDragon\\DesertDragon.FBX");
     desertDragon->scaleMatrix = Matrix::CreateScale(0.1);
     models[L"desertDragon"] = std::move(desertDragon);
+    */
 
     auto sphere = assets->GenerateSphere(cmdList);
     models[L"sphere"] = std::move(sphere);
@@ -952,9 +951,10 @@ void HybridAtmosphereApp::LoadModels()
     auto platform = assets->CreateModelFromFile(
         cmdList, "Data\\Objects\\Temple\\SM_PlatformSquare.FBX");
     models[L"platform"] = std::move(platform);
-
+    /*
     auto doom = assets->CreateModelFromFile(cmdList, "Data\\Objects\\DoomSlayer\\doommarine.obj");
     models[L"doom"] = std::move(doom);
+    */
 
     queue->WaitForFenceValue(queue->ExecuteCommandList(cmdList));
     Flush();
@@ -1061,6 +1061,8 @@ void HybridAtmosphereApp::CreateGO()
     }
     gameObjects.push_back(std::move(quadRitem));
 
+    // auto deltaUp = Vector3::Up * 100;
+    auto deltaUp = Vector3::Zero * 100;
 
     auto sun1 = std::make_unique<GameObject>("Directional Light");
     auto light = std::make_shared<Light>(Directional);
@@ -1069,10 +1071,11 @@ void HybridAtmosphereApp::CreateGO()
     sun1->AddComponent(light);
     gameObjects.push_back(std::move(sun1));
 
+    /*
     for (int i = 0; i < 11; ++i)
     {
         auto nano = std::make_unique<GameObject>();
-        nano->GetTransform()->SetPosition(Vector3::Right * -15 + Vector3::Forward * 12 * i);
+        nano->GetTransform()->SetPosition(Vector3::Right * -15 + Vector3::Forward * 12 * i + deltaUp);
         nano->GetTransform()->SetEulerRotate(Vector3(0, -90, 0));
         auto renderer = std::make_shared<ModelRenderer>(primeDevice, models[L"nano"]);
         nano->AddComponent(renderer);
@@ -1082,7 +1085,7 @@ void HybridAtmosphereApp::CreateGO()
 
         auto doom = std::make_unique<GameObject>();
         doom->SetScale(0.08);
-        doom->GetTransform()->SetPosition(Vector3::Right * 15 + Vector3::Forward * 12 * i);
+        doom->GetTransform()->SetPosition(Vector3::Right * 15 + Vector3::Forward * 12 * i + deltaUp);
         doom->GetTransform()->SetEulerRotate(Vector3(0, 90, 0));
         renderer = std::make_shared<ModelRenderer>(primeDevice, models[L"doom"]);
         doom->AddComponent(renderer);
@@ -1096,7 +1099,8 @@ void HybridAtmosphereApp::CreateGO()
         {
             auto atlas = std::make_unique<GameObject>();
             atlas->GetTransform()->SetPosition(
-                Vector3::Right * -60 + Vector3::Right * -30 * j + Vector3::Up * 11 + Vector3::Forward * 10 * i);
+                Vector3::Right * -60 + Vector3::Right * -30 * j + Vector3::Up * 11 + Vector3::Forward * 10 * i
+                + deltaUp);
             auto renderer = std::make_shared<ModelRenderer>(primeDevice, models[L"atlas"]);
             atlas->AddComponent(renderer);
             typedRenderer[static_cast<int>(RenderMode::Opaque)].push_back(renderer);
@@ -1105,16 +1109,17 @@ void HybridAtmosphereApp::CreateGO()
 
             auto pbody = std::make_unique<GameObject>();
             pbody->GetTransform()->SetPosition(
-                Vector3::Right * 130 + Vector3::Right * -30 * j + Vector3::Up * 11 + Vector3::Forward * 10 * i);
+                Vector3::Right * 130 + Vector3::Right * -30 * j + Vector3::Up * 11 + Vector3::Forward * 10 * i
+                + deltaUp);
             renderer = std::make_shared<ModelRenderer>(primeDevice, models[L"pbody"]);
             pbody->AddComponent(renderer);
             typedRenderer[static_cast<int>(RenderMode::Opaque)].push_back(renderer);
             gameObjects.push_back(std::move(pbody));
         }
     }
-
+    */
     auto particle = std::make_unique<GameObject>();
-    particle->GetTransform()->SetPosition(Vector3::Up);
+    particle->GetTransform()->SetPosition(Vector3::Up + deltaUp);
     const auto emitter = std::make_shared<ParticleEmitter>(primeDevice, 10000);
     particle->AddComponent(emitter);
     typedRenderer[static_cast<int>(RenderMode::Particle)].push_back(emitter);
@@ -1125,7 +1130,7 @@ void HybridAtmosphereApp::CreateGO()
     auto platform = std::make_unique<GameObject>();
     platform->SetScale(0.2);
     platform->GetTransform()->SetEulerRotate(Vector3(90, 90, 0));
-    platform->GetTransform()->SetPosition(Vector3::Backward * -130);
+    platform->GetTransform()->SetPosition(Vector3::Backward * -130 + deltaUp);
     auto renderer = std::make_shared<ModelRenderer>(primeDevice, models[L"platform"]);
     platform->AddComponent(renderer);
     typedRenderer[static_cast<int>(RenderMode::Opaque)].push_back(renderer);
@@ -1140,7 +1145,7 @@ void HybridAtmosphereApp::CreateGO()
     auto camera = std::make_unique<GameObject>("MainCamera");
     camera->GetTransform()->SetParent(rotater->GetTransform().get());
     //camera->GetTransform()->SetPosition(Vector3(-1000, 190, -32));
-    camera->GetTransform()->SetPosition(Vector3(0, -100, -100));
+    camera->GetTransform()->SetPosition(Vector3(0, 0, -100));
     //camera->GetTransform()->SetEulerRotate(Vector3(-30, 270, 0));
     camera->GetTransform()->SetEulerRotate(Vector3(0, 0, 0));
     camera->AddComponent(std::make_shared<Camera>(AspectRatio()));
@@ -1161,7 +1166,7 @@ void HybridAtmosphereApp::CreateGO()
     stair->GetTransform()->SetParent(platform->GetTransform().get());
     stair->SetScale(0.2);
     stair->GetTransform()->SetEulerRotate(Vector3(0, 0, 90));
-    stair->GetTransform()->SetPosition(Vector3::Left * 700);
+	stair->GetTransform()->SetPosition(Vector3::Left * 700);
     renderer = std::make_shared<ModelRenderer>(primeDevice, models[L"stair"]);
     stair->AddComponent(renderer);
     typedRenderer[static_cast<int>(RenderMode::Opaque)].push_back(renderer);
@@ -1179,7 +1184,7 @@ void HybridAtmosphereApp::CreateGO()
     auto fountain = std::make_unique<GameObject>();
     fountain->SetScale(0.005);
     fountain->GetTransform()->SetEulerRotate(Vector3(90, 0, 0));
-    fountain->GetTransform()->SetPosition(Vector3::Up * 35 + Vector3::Backward * 77);
+    fountain->GetTransform()->SetPosition(Vector3::Up * 35 + Vector3::Backward * 77 + deltaUp);
     renderer = std::make_shared<ModelRenderer>(primeDevice, models[L"fountain"]);
     fountain->AddComponent(renderer);
     typedRenderer[static_cast<int>(RenderMode::Opaque)].push_back(renderer);
@@ -1189,10 +1194,11 @@ void HybridAtmosphereApp::CreateGO()
     gameObjects.push_back(std::move(columns));
     gameObjects.push_back(std::move(fountain));
 
-
+    /*
     auto mountDragon = std::make_unique<GameObject>();
     mountDragon->GetTransform()->SetEulerRotate(Vector3(90, 0, 0));
-    mountDragon->GetTransform()->SetPosition(Vector3::Right * -960 + Vector3::Up * 45 + Vector3::Backward * 775);
+    mountDragon->GetTransform()->SetPosition(Vector3::Right * -960 + Vector3::Up * 45 + Vector3::Backward * 775
+        + deltaUp);
     renderer = std::make_shared<ModelRenderer>(primeDevice, models[L"mountDragon"]);
     mountDragon->AddComponent(renderer);
     typedRenderer[static_cast<int>(RenderMode::Opaque)].push_back(renderer);
@@ -1201,7 +1207,8 @@ void HybridAtmosphereApp::CreateGO()
 
     auto desertDragon = std::make_unique<GameObject>();
     desertDragon->GetTransform()->SetEulerRotate(Vector3(90, 0, 0));
-    desertDragon->GetTransform()->SetPosition(Vector3::Right * 960 + Vector3::Up * -5 + Vector3::Backward * 775);
+    desertDragon->GetTransform()->SetPosition(Vector3::Right * 960 + Vector3::Up * -5 + Vector3::Backward * 775
+        + deltaUp);
     renderer = std::make_shared<ModelRenderer>(primeDevice, models[L"desertDragon"]);
     desertDragon->AddComponent(renderer);
     typedRenderer[static_cast<int>(RenderMode::Opaque)].push_back(renderer);
@@ -1210,7 +1217,8 @@ void HybridAtmosphereApp::CreateGO()
     auto griffon = std::make_unique<GameObject>();
     griffon->GetTransform()->SetEulerRotate(Vector3(90, 0, 0));
     griffon->SetScale(0.8);
-    griffon->GetTransform()->SetPosition(Vector3::Right * -355 + Vector3::Up * -7 + Vector3::Backward * 17);
+    griffon->GetTransform()->SetPosition(Vector3::Right * -355 + Vector3::Up * -7 + Vector3::Backward * 17
+        + deltaUp);
     renderer = std::make_shared<ModelRenderer>(primeDevice, models[L"griffon"]);
     griffon->AddComponent(renderer);
     typedRenderer[static_cast<int>(RenderMode::OpaqueAlphaDrop)].push_back(renderer);
@@ -1219,12 +1227,13 @@ void HybridAtmosphereApp::CreateGO()
     griffon = std::make_unique<GameObject>();
     griffon->SetScale(0.8);
     griffon->GetTransform()->SetEulerRotate(Vector3(90, 0, 0));
-    griffon->GetTransform()->SetPosition(Vector3::Right * 355 + Vector3::Up * -7 + Vector3::Backward * 17);
+    griffon->GetTransform()->SetPosition(Vector3::Right * 355 + Vector3::Up * -7 + Vector3::Backward * 17
+        + deltaUp);
     renderer = std::make_shared<ModelRenderer>(primeDevice, models[L"griffon"]);
     griffon->AddComponent(renderer);
     typedRenderer[static_cast<int>(RenderMode::OpaqueAlphaDrop)].push_back(renderer);
     gameObjects.push_back(std::move(griffon));
-
+    */
     debugLogger.PushMessage(std::wstring(L"\nFinish create GO"));
 }
 
@@ -1682,7 +1691,7 @@ void HybridAtmosphereApp::LoadCustomShaders()
 {
     // mCustomAppShaders = MemoryAllocator::CreateUnorderedMap<std::string, std::shared_ptr<GShader>>();
 
-    LoadTerrainShader();
+    LoadAtmospherePostProcessShader();
 
     for (auto&& pair : mCustomAppShaders)
     {
@@ -1696,8 +1705,8 @@ void HybridAtmosphereApp::LoadCustomPSOs(std::shared_ptr<GDevice> device, std::s
 {
     // mCustomAppPSOs = MemoryAllocator::CreateUnorderedMap<RenderMode, std::shared_ptr<GraphicPSO>>();
 
-    LoadTerrainPSO(rootSignature,
-        defautlInputDesc, backBufferFormat, depthStencilFormat);
+	LoadAtmospherePostProcessPSO(rootSignature,
+		defautlInputDesc, backBufferFormat, depthStencilFormat);
 
     for (auto& pso : mCustomAppPSOs)
     {
@@ -1708,119 +1717,81 @@ void HybridAtmosphereApp::LoadCustomPSOs(std::shared_ptr<GDevice> device, std::s
 void HybridAtmosphereApp::LoadCustomTextures()
 {
     // Use default textures for now
-    LoadTerrainTexture();
+    
 }
 
 void HybridAtmosphereApp::LoadCustomMaterials()
 {
-    LoadTerrainMaterials();
+    
 }
 
 void HybridAtmosphereApp::CreateCustomGO()
 {
-    CreateTerrainGO();
+    CreateAtmosphereGO();
 }
 
-void HybridAtmosphereApp::LoadTerrainShader()
+void HybridAtmosphereApp::LoadAtmospherePostProcessShader()
 {
-    std::vector<std::string> dirs{
-        "Shaders",
-        "Shaders/Terrain"
-    };
+	std::vector<std::string> dirs{
+	"Shaders"
+	};
 
-    mCustomAppShaders["TerrainVS"] = std::move(
-        std::make_shared<GShaderCustomInclude>(2u, dirs,
-            L"Shaders\\Terrain\\Terrain.hlsl", VertexShader, nullptr, "TerrainVS", "vs_5_1"));
+	mCustomAppShaders["AtmospherePostVS"] = std::move(
+		std::make_shared<GShaderCustomInclude>(1u, dirs,
+			L"Shaders\\SkyAtmosphere\\PostProcess.hlsl", VertexShader, nullptr, "PostProcessVS", "vs_5_1"));
 
-    /*
-    mCustomAppShaders["TerrainVS"] = std::move(
-        std::make_shared<GShader>(L"Shaders\\Terrain\\Terrain.hlsl", VertexShader, nullptr, "TerrainVS", "vs_5_1"));
-    */
-
-    /*    
-    mCustomAppShaders["TerrainPS"] = std::move(
-        std::make_shared<GShader>(L"Shaders\\Terrain\\Terrain.hlsl", PixelShader, nullptr, "TerrainPS", "ps_5_1"));
-    */
+	mCustomAppShaders["AtmospherePostPS"] = std::move(
+		std::make_shared<GShaderCustomInclude>(1u, dirs,
+            L"Shaders\\SkyAtmosphere\\PostProcess.hlsl", PixelShader, nullptr, "PostProcessPS", "ps_5_1"));
 }
 
-void HybridAtmosphereApp::LoadTerrainPSO(std::shared_ptr<GRootSignature> rootSignature,
-    D3D12_INPUT_LAYOUT_DESC defautlInputDesc, DXGI_FORMAT backBufferFormat,
-    DXGI_FORMAT depthStencilFormat)
+void HybridAtmosphereApp::LoadAtmospherePostProcessPSO(std::shared_ptr<GRootSignature> rootSignature,
+    D3D12_INPUT_LAYOUT_DESC defautlInputDesc, DXGI_FORMAT backBufferFormat, DXGI_FORMAT depthStencilFormat)
 {
-    D3D12_GRAPHICS_PIPELINE_STATE_DESC terrainPsoDesc;
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC postProcPsoDesc;
 
-    ZeroMemory(&terrainPsoDesc, sizeof(D3D12_GRAPHICS_PIPELINE_STATE_DESC));
-    terrainPsoDesc.InputLayout = defautlInputDesc;
-    terrainPsoDesc.pRootSignature = rootSignature->GetNativeSignature().Get();
-    terrainPsoDesc.VS = mCustomAppShaders["TerrainVS"]->GetShaderResource();
-    terrainPsoDesc.PS = defaultPrimePipelineResources.GetShader("OpaquePixel")->GetShaderResource();
-    terrainPsoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
-    terrainPsoDesc.RasterizerState.CullMode = D3D12_CULL_MODE_BACK;
-    // terrainPsoDesc.RasterizerState.DepthClipEnable = false;
-    terrainPsoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
-    terrainPsoDesc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
-    terrainPsoDesc.SampleMask = UINT_MAX;
-    terrainPsoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
-    terrainPsoDesc.NumRenderTargets = 1;
-    terrainPsoDesc.RTVFormats[0] = GetSRGBFormat(backBufferFormat);
-    terrainPsoDesc.SampleDesc.Count = 1;
-    terrainPsoDesc.SampleDesc.Quality = 0;
-    terrainPsoDesc.DSVFormat = depthStencilFormat;
+	ZeroMemory(&postProcPsoDesc, sizeof(D3D12_GRAPHICS_PIPELINE_STATE_DESC));
+	postProcPsoDesc.InputLayout = defautlInputDesc;
+	postProcPsoDesc.pRootSignature = rootSignature->GetNativeSignature().Get();
+	postProcPsoDesc.VS = mCustomAppShaders["AtmospherePostVS"]->GetShaderResource();
+	postProcPsoDesc.PS = mCustomAppShaders["AtmospherePostPS"]->GetShaderResource();
+	postProcPsoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
+	postProcPsoDesc.RasterizerState.CullMode = D3D12_CULL_MODE_BACK;
+	// postProcPsoDesc.RasterizerState.DepthClipEnable = false;
+	postProcPsoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
+	postProcPsoDesc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
+	postProcPsoDesc.SampleMask = UINT_MAX;
+	postProcPsoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+	postProcPsoDesc.NumRenderTargets = 1;
+	postProcPsoDesc.RTVFormats[0] = GetSRGBFormat(backBufferFormat);
+	postProcPsoDesc.SampleDesc.Count = 1;
+	postProcPsoDesc.SampleDesc.Quality = 0;
+	postProcPsoDesc.DSVFormat = depthStencilFormat;
 
-    auto depthStencilDesc = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
+	auto depthStencilDesc = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
 
-    auto terrainPSO = std::make_shared<GraphicPSO>(RenderMode::Terrain);
-    terrainPSO->SetPsoDesc(terrainPsoDesc);
-    depthStencilDesc = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
-    terrainPSO->SetDepthStencilState(depthStencilDesc);
+	auto postProcPSO = std::make_shared<GraphicPSO>(RenderMode::AtmospherePostProcess);
+	postProcPSO->SetPsoDesc(postProcPsoDesc);
+	depthStencilDesc = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
+    depthStencilDesc.DepthFunc = D3D12_COMPARISON_FUNC_EQUAL;
+	postProcPSO->SetDepthStencilState(depthStencilDesc);
 
-    mCustomAppPSOs[terrainPSO->GetRenderMode()] = std::move(terrainPSO);
+	mCustomAppPSOs[postProcPSO->GetRenderMode()] = std::move(postProcPSO);
 }
 
-void HybridAtmosphereApp::LoadTerrainTexture()
+void HybridAtmosphereApp::CreateAtmosphereGO()
 {
-    auto queue = primeDevice->GetCommandQueue(GQueueType::Compute);
+	skyAtmosphere = std::make_shared<Atmosphere::SkyAtmosphere>(primeDevice);
+	gFrameId = 0u;
 
-    const auto cmdList = queue->GetCommandList();
-
-    auto heightMapTex = GTexture::LoadTextureFromFile(L"Data\\Textures\\heightmap.dds", cmdList);
-    heightMapTex->SetName(L"heightMapTex");
-    assets->AddTexture(heightMapTex);
-
-    queue->WaitForFenceValue(queue->ExecuteCommandList(cmdList));
-    Flush();
-    debugLogger.PushMessage(std::wstring(L"\nLoad heightmap DDS Texture"));
-}
-
-void HybridAtmosphereApp::LoadTerrainMaterials()
-{
-    
-}
-
-void HybridAtmosphereApp::CreateTerrainGO()
-{
-    auto terrain = std::make_unique<GameObject>();
-    // Nedd custom ModelRenderer
-    /*
-    auto renderer = std::make_shared<ModelRenderer>(primeDevice, models[L"terrain"]);
-    terrain->AddComponent(renderer);
-    typedRenderer[static_cast<int>(RenderMode::Terrain)].push_back(renderer);
-    */
-    auto renderer = std::make_shared<TerrainRenderer>(
+    auto atmospherePost = std::make_unique<GameObject>();
+    auto renderer = std::make_shared<SkyAtmosphereRenderer>(
         primeDevice,
         models[L"quad"],
-        *assets->GetTexture(
-            assets->
-            GetTextureIndex(L"heightMapTex")).get(),
-        &srvTexturesMemory,
-        assets->GetTextureIndex(L"heightMapTex")
+        skyAtmosphere->GetRayMarchTextureSrv(),
+        skyAtmosphere->GetTerrainRenderSrv()
     );
-    terrain->AddComponent(renderer);
-    typedRenderer[static_cast<int>(RenderMode::Terrain)].push_back(renderer);
-
-    // Need to assign material
-    /*
-    model->SetMeshMaterial(i, material);
-    */
-    gameObjects.push_back(std::move(terrain));
+    atmospherePost->AddComponent(renderer);
+    typedRenderer[static_cast<int>(RenderMode::AtmospherePostProcess)].push_back(renderer);
+    gameObjects.push_back(std::move(atmospherePost));
 }

@@ -78,7 +78,8 @@ Texture2D shadowMap : register(t1);
 Texture2D ssaoMap : register(t2);
 Texture2D texturesMaps[] : register(t3);
 
-Texture2D terrainHeightMap : register(t0, space2);
+Texture2D rayMarchingRes : register(t0, space2);
+Texture2D terrainTexture : register(t1, space2);
 
 SamplerState gsamPointWrap : register(s0);
 SamplerState gsamPointClamp : register(s1);

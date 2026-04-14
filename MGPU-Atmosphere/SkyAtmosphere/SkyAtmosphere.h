@@ -3,6 +3,7 @@
 #include "GDevice.h"
 #include "GCommandList.h"
 #include "ComputePSO.h"
+#include "GraphicPSO.h"
 #include "GTexture.h"
 #include "GDescriptor.h"
 
@@ -186,6 +187,16 @@ namespace Atmosphere
         custom_unordered_map<std::string, std::shared_ptr<ComputePSO>> mAtmospherePSOs =
             MemoryAllocator::CreateUnorderedMap<std::string, std::shared_ptr<ComputePSO>>();
 
+        std::shared_ptr<GraphicPSO> mTerrainPSO;
+		
+        std::shared_ptr<GTexture> terrainRenderTarget;
+		GDescriptor terrainRenderTargetSRV;
+		GDescriptor terrainRenderTargetRTV;
+
+        std::shared_ptr<GTexture> depthMap;
+		GDescriptor depthMapSRV;
+		GDescriptor depthMapDSV;
+
         std::shared_ptr<GTexture> mTransmittanceLut;
         GDescriptor mTransmittanceLutUAV;
         GDescriptor mTransmittanceLutSRV;
@@ -206,11 +217,31 @@ namespace Atmosphere
         GDescriptor mRayMarchingResultUAV;
         GDescriptor mRayMarchingResultSRV;
 
-        AtmosphereInfo mAtmosphereInfos;
-        LookUpTablesInfo mLutInfos;
+		AtmosphereInfo mAtmosphereInfos;
+		LookUpTablesInfo mLutInfos;
+
+        /*
+        Terrain stuff
+        */
+
+		std::shared_ptr<GTexture> mHeightMapTex;
+		GDescriptor mHeightMapTexSrv;
 
         std::shared_ptr<ConstantUploadBuffer<AtmosphereCB>> mAtmosphereCB;
         std::shared_ptr<ConstantUploadBuffer<CommonConstantBufferStructure>> mCommonCB;
+
+		struct TerrainDataBufferStructure
+		{
+			Matrix viewProjMat;
+			Vector3 terrainPosDelta;
+		} mTerrainData;
+
+		std::shared_ptr<ConstantUploadBuffer<TerrainDataBufferStructure>> mTerrainCB;
+		Vector3 terrainPos = Vector3(-1.02f, -0.33f, -2.38f);
+
+		uint32_t mTerrainResolution = 512u;
+		D3D12_VIEWPORT mTerrainViewport{};
+		D3D12_RECT mTerrainScissorRect{};
 
         enum class CBSlots : UINT {
             Common = 0u, Atmosphere, Count
@@ -222,9 +253,15 @@ namespace Atmosphere
 
         enum class UavSlots : UINT {
             Transmittance = 0u, Multiscat, SkyView, Aerial, RayMarching, Count
-        };
+		};
 
-    public:
+        static constexpr DXGI_FORMAT BackBufferFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
+		static constexpr DXGI_FORMAT DepthMapFormat = DXGI_FORMAT_R32_TYPELESS;
+
+	public:
+		UINT mScreenWidth = 1920;
+		UINT mScreenHeight = 1080;
+
         Matrix mShadowmapViewProjMat;
         Matrix mViewMat;
         Matrix mProjMat;
@@ -239,7 +276,7 @@ namespace Atmosphere
         CommonConstantBufferStructure mCommonConstanants;
 
         SkyAtmosphere(const std::shared_ptr<GDevice>& device,
-			UINT screenWidth = 1920, UINT screenHeight = 1080);
+			UINT screenWidth = 1920, UINT screenHeight = 1080, uint32_t terrainResolution = 512u);
 
         void OnResize(const UINT newScreenWidth, const UINT newScreenHeight);
 
@@ -253,6 +290,7 @@ namespace Atmosphere
         void InitPSOs();
 
         void LoadResources();
+        void LoadTerrainResource();
         void LoadTransmittanceLutResource();
         void LoadMultiScatLutResource();
         void LoadSkyViewLutResource();
@@ -260,6 +298,16 @@ namespace Atmosphere
         void LoadRayMarchingResource();
 
         void UpdateSkyAtmosphereBuffer();
+        void UpdateTerrain();
+
+        std::shared_ptr<GTexture> GetRayMarchTexture();
+        GDescriptor* GetRayMarchTextureSrv();
+        GDescriptor* GetTerrainRenderSrv();
+        std::shared_ptr<GRootSignature> GetRootSignature() { return mRootSignature; }
+
+		const GTexture& GetDepthMap() const { return *depthMap.get(); }
+		const GDescriptor* GetDepthMapSRV() const { return &depthMapSRV; }
+		const GDescriptor* GetDepthMapDSV() const { return &depthMapDSV; }
 
         /*
         void InitTransmittanceLutPass();
@@ -270,13 +318,16 @@ namespace Atmosphere
         */
 
 
+        void PopulateTerrainCommands(const std::shared_ptr<GCommandList>& cmdList);
         void PopulateTransmittanceLutCommands(const std::shared_ptr<GCommandList>& cmdList);
         void PopulateMultiScatLutCommands(const std::shared_ptr<GCommandList>& cmdList);
         void PopulateSkyViewLutCommands(const std::shared_ptr<GCommandList>& cmdList);
         void PopulateAerialPerspectiveCommands(const std::shared_ptr<GCommandList>& cmdList);
-        void PopulateRayMarchingCommands(const std::shared_ptr<GCommandList>& cmdList, const GDescriptor* depthSRV);
+        void PopulateRayMarchingCommands(const std::shared_ptr<GCommandList>& cmdList);
         /*
         */
+
+
     };
 
 }

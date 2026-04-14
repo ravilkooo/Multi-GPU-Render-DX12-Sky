@@ -822,27 +822,32 @@ namespace PEPEngine::Graphics
                                         const GDescriptor* dsvMemory,
                                         const size_t dsvOffset, const BOOL isSingleHandle) const
     {
-        assert(targetsSize != 0);
-
         auto* dsvPtr = (dsvMemory == nullptr || dsvMemory->IsNull())
                            ? nullptr
                            : &dsvMemory->GetCPUHandle(dsvOffset);
 
-        if (isSingleHandle)
+        if (targetsSize != 0)
         {
-            cmdList->OMSetRenderTargets(targetsSize, &targets[0].GetRTVCpu(), true, dsvPtr);
+            if (isSingleHandle)
+            {
+                cmdList->OMSetRenderTargets(targetsSize, &targets[0].GetRTVCpu(), true, dsvPtr);
+            }
+            else
+            {
+                std::vector<D3D12_CPU_DESCRIPTOR_HANDLE> handlers;
+                handlers.resize(targetsSize);
+
+                for (int i = 0; i < targetsSize; ++i)
+                {
+                    handlers.push_back(targets[i].GetRTVCpu());
+                }
+
+                cmdList->OMSetRenderTargets(handlers.size(), handlers.data(), false, dsvPtr);
+            }
         }
         else
         {
-            std::vector<D3D12_CPU_DESCRIPTOR_HANDLE> handlers;
-            handlers.resize(targetsSize);
-
-            for (int i = 0; i < targetsSize; ++i)
-            {
-                handlers.push_back(targets[i].GetRTVCpu());
-            }
-
-            cmdList->OMSetRenderTargets(handlers.size(), handlers.data(), false, dsvPtr);
+			cmdList->OMSetRenderTargets(0, nullptr, false, dsvPtr);
         }
     }
 
