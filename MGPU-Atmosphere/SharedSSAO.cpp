@@ -333,22 +333,6 @@ void SSAOResources::BuildRandomTexture()
     device->Flush();
 }
 
-void SSAOCrossResources::Initialize(const SSAOResources& Resources, const std::shared_ptr<GDevice>& primeDevice, const std::shared_ptr<GDevice>& secondDevice)
-{
-    sharedNormalMap = std::make_shared<GCrossAdapterResource>(Resources.GetNormalMap().GetD3D12ResourceDesc(), primeDevice, secondDevice);
-    sharedDepthMap = std::make_shared<GCrossAdapterResource>(Resources.GetDepthMap().GetD3D12ResourceDesc(), primeDevice, secondDevice,
-                                                             L"Cross Adapter Depth Map");
-    sharedAmbientMap = std::make_shared<GCrossAdapterResource>(Resources.GetAmbientMap().GetD3D12ResourceDesc(), primeDevice, secondDevice,
-                                                               L"Cross Adapter Ambient Map");
-}
-
-void SSAOCrossResources::OnResize(uint32_t width, uint32_t height) const
-{
-    sharedNormalMap->Resize(width, height);
-    sharedDepthMap->Resize(width, height);
-    sharedAmbientMap->Resize(width, height);
-}
-
 SharedSSAO::SharedSSAO()
 {
 }
@@ -405,11 +389,6 @@ void SharedSSAO::Initialize(const std::shared_ptr<GDevice>& primeDevice, const s
     primeResources.Initialize(primeDevice, layout);
     primeResources.OnResize(width, height);
 
-    secondResources.Initialize(secondDevice, layout);
-    secondResources.OnResize(width, height);
-
-    crossResources.Initialize(primeResources, primeDevice, secondDevice);
-    crossResources.OnResize(width, height);
     OnResize(width, height);
 }
 
@@ -430,8 +409,6 @@ void SharedSSAO::OnResize(const UINT newWidth, const UINT newHeight)
     mScissorRect = {0, 0, static_cast<int>(RenderTargetWidth), static_cast<int>(RenderTargetHeight)};
 
     primeResources.OnResize(newWidth, newHeight);
-    secondResources.OnResize(newWidth, newHeight);
-    crossResources.OnResize(newWidth, newHeight);
 }
 
 void SharedSSAO::ComputeSsao(

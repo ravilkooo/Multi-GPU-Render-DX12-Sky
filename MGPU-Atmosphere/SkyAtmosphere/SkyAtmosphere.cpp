@@ -84,7 +84,7 @@ void Atmosphere::SkyAtmosphere::InitAtmosphereData()
 	mCommonConstanants.rayMarchMinMaxSPP[0] = float(viewRayMarchMinSPP);
 	mCommonConstanants.rayMarchMinMaxSPP[1] = float(viewRayMarchMaxSPP);
 
-    mCamPosFinal = Vector3::Zero;
+    mCamPosFinal = Vector3(0.0f, 0.0f, 0.1f);
 }
 
 void Atmosphere::SkyAtmosphere::SetupEarthAtmosphere()

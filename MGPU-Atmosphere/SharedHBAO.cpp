@@ -99,11 +99,6 @@ void SharedHBAO::Initialize(const std::shared_ptr<GDevice>& PrimeDevice, const s
     primeResources.Initialize(PrimeDevice, layout);
     primeResources.OnResize(width, height);
 
-    secondResources.Initialize(SecondDevice, layout);
-    secondResources.OnResize(width, height);
-
-    crossResources.Initialize(primeResources, PrimeDevice, SecondDevice);
-    crossResources.OnResize(width, height);
     OnResize(width, height);
 }
 
@@ -116,8 +111,6 @@ void SharedHBAO::OnResize(UINT newWidth, UINT newHeight)
     RenderTargetHeight = newHeight;
 
     primeResources.OnResize(newWidth, newHeight);
-    secondResources.OnResize(newWidth, newHeight);
-    crossResources.OnResize(newWidth, newHeight);
 }
 
 static UINT IntDivRoundUp(UINT a, UINT b) { return (a + b - 1) / b; }

@@ -17,7 +17,6 @@ using namespace Graphics;
 using namespace Allocator;
 using namespace Utils;
 
-class SSAOCrossResources;
 class SharedSSAO;
 
 static constexpr int MaxBlurRadius = 5;
@@ -93,22 +92,6 @@ protected:
     void virtual BuildRandomTexture();
 };
 
-class SSAOCrossResources final
-{
-    std::shared_ptr<GCrossAdapterResource> sharedNormalMap;
-    std::shared_ptr<GCrossAdapterResource> sharedDepthMap;
-    std::shared_ptr<GCrossAdapterResource> sharedAmbientMap;
-
-public:
-    void Initialize(const SSAOResources& Resources, const std::shared_ptr<GDevice>& primeDevice, const std::shared_ptr<GDevice>& secondDevice);
-
-    void OnResize(uint32_t width, uint32_t height) const;
-
-    const GCrossAdapterResource& GetNormalMap() const { return *sharedNormalMap; }
-    const GCrossAdapterResource& GetDepthMap() const { return *sharedDepthMap; }
-    const GCrossAdapterResource& GetAmbientMap() const { return *sharedAmbientMap; }
-};
-
 
 class SharedSSAO final
 {
@@ -125,8 +108,6 @@ public:
     static std::vector<float> CalcGaussWeights(float sigma);
 
     const SSAOResources& GetPrimeResources() { return primeResources; }
-    const SSAOResources& GetSecondResource() { return secondResources; }
-    const SSAOCrossResources& GetCrossResources() { return crossResources; }
 
     void Initialize(const std::shared_ptr<GDevice>& primeDevice, const std::shared_ptr<GDevice>& secondDevice,
                     const D3D12_INPUT_LAYOUT_DESC& layout, UINT width, UINT height);
@@ -144,8 +125,6 @@ public:
 
 private:
     SSAOResources primeResources;
-    SSAOResources secondResources;
-    SSAOCrossResources crossResources;
 
     UINT RenderTargetWidth;
     UINT RenderTargetHeight;

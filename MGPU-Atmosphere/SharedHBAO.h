@@ -51,16 +51,12 @@ public:
 class SharedHBAO
 {
     HBAOResources primeResources;
-    HBAOResources secondResources;
-    SSAOCrossResources crossResources;
 
     UINT RenderTargetWidth;
     UINT RenderTargetHeight;
 
 public:
     const HBAOResources& GetPrimeResources() const { return primeResources; }
-    const HBAOResources& GetSecondResources() const { return secondResources; }
-    const SSAOCrossResources& GetCrossResources() const { return crossResources; }
 
     void Initialize(const std::shared_ptr<GDevice>& PrimeDevice, const std::shared_ptr<GDevice>& SecondDevice,
                     const D3D12_INPUT_LAYOUT_DESC& layout, UINT width, UINT height);

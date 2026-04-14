@@ -295,68 +295,10 @@ void HybridAtmosphereApp::PopulateNormalMapCommands(const std::shared_ptr<GComma
 
 void HybridAtmosphereApp::PopulateAmbientMapCommands(const std::shared_ptr<GCommandList>& cmdList) const
 {
-    if (IsUsingSharedSSAO)
-    {
-        if (IsUseHBAO)
-        {
-            {
-                const auto& Resources = hbaoPass->GetPrimeResources();
-                const auto& CrossResource = hbaoPass->GetCrossResources();
-                cmdList->CopyResource(CrossResource.GetDepthMap().GetPrimeResource(), Resources.GetDepthMap());
-                cmdList->CopyResource(Resources.GetAmbientMap(), CrossResource.GetAmbientMap().GetPrimeResource());
-            }
-            {
-                auto secondQueue = secondDevice->GetCommandQueue();
-                if (currentFrameResource->SecondRenderFenceValue == 0 || secondQueue->IsFinish(currentFrameResource->SecondRenderFenceValue))
-                {
-                    const auto& Resources = hbaoPass->GetSecondResources();
-                    const auto& CrossResource = hbaoPass->GetCrossResources();
-                    const auto secondCmdList = secondQueue->GetCommandList();
-                    secondCmdList->CopyResource(Resources.GetDepthMap(), CrossResource.GetDepthMap().GetSharedResource());
-
-                    hbaoPass->Compute(secondCmdList, currentFrameResource->SecondHBAOConstantUploadBuffer, Resources);
-
-                    secondCmdList->CopyResource(CrossResource.GetAmbientMap().GetSharedResource(), Resources.GetAmbientMap());
-
-                    currentFrameResource->SecondRenderFenceValue = secondQueue->ExecuteCommandList(secondCmdList);
-                }
-            }
-        }
-        else
-        {
-            {
-                const auto& Resources = ssaoPass->GetPrimeResources();
-                const auto& CrossResource = ssaoPass->GetCrossResources();
-                cmdList->CopyResource(CrossResource.GetDepthMap().GetPrimeResource(), Resources.GetDepthMap());
-                cmdList->CopyResource(CrossResource.GetNormalMap().GetPrimeResource(), Resources.GetNormalMap());
-                cmdList->CopyResource(Resources.GetAmbientMap(), CrossResource.GetAmbientMap().GetPrimeResource());
-            }
-            {
-                auto secondQueue = secondDevice->GetCommandQueue();
-                if (currentFrameResource->SecondRenderFenceValue == 0 || secondQueue->IsFinish(currentFrameResource->SecondRenderFenceValue))
-                {
-                    const auto& Resources = ssaoPass->GetSecondResource();
-                    const auto& CrossResource = ssaoPass->GetCrossResources();
-                    const auto secondCmdList = secondQueue->GetCommandList();
-                    secondCmdList->CopyResource(Resources.GetNormalMap(), CrossResource.GetNormalMap().GetSharedResource());
-                    secondCmdList->CopyResource(Resources.GetDepthMap(), CrossResource.GetDepthMap().GetSharedResource());
-
-                    ssaoPass->ComputeSsao(secondCmdList, currentFrameResource->SecondSsaoConstantUploadBuffer, Resources, 1);
-
-                    secondCmdList->CopyResource(CrossResource.GetAmbientMap().GetSharedResource(), Resources.GetAmbientMap());
-
-                    currentFrameResource->SecondRenderFenceValue = secondQueue->ExecuteCommandList(secondCmdList);
-                }
-            }
-        }
-    }
-    else
-    {
-        if (IsUseHBAO)
-            hbaoPass->Compute(cmdList, currentFrameResource->PrimeHBAOConstantUploadBuffer, hbaoPass->GetPrimeResources());
-        else
-            ssaoPass->ComputeSsao(cmdList, currentFrameResource->PrimeSsaoConstantUploadBuffer, ssaoPass->GetPrimeResources(), 3);
-    }
+	if (IsUseHBAO)
+		hbaoPass->Compute(cmdList, currentFrameResource->PrimeHBAOConstantUploadBuffer, hbaoPass->GetPrimeResources());
+	else
+		ssaoPass->ComputeSsao(cmdList, currentFrameResource->PrimeSsaoConstantUploadBuffer, ssaoPass->GetPrimeResources(), 3);
 }
 
 void HybridAtmosphereApp::PopulateForwardPathCommands(const std::shared_ptr<GCommandList>& cmdList)
@@ -1464,7 +1406,6 @@ void HybridAtmosphereApp::UpdateSsaoCB(const GameTimer& gt) const
         ssaoCB.SurfaceEpsilon = 0.05f;
 
         currentFrameResource->PrimeSsaoConstantUploadBuffer->CopyData(0, ssaoCB);
-        currentFrameResource->SecondSsaoConstantUploadBuffer->CopyData(0, ssaoCB);
     }
     {
         HBAOConstants hbaoCB;
@@ -1478,7 +1419,6 @@ void HybridAtmosphereApp::UpdateSsaoCB(const GameTimer& gt) const
         hbaoCB.DiscardDistance = 300.0f;
 
         currentFrameResource->PrimeHBAOConstantUploadBuffer->CopyData(0, hbaoCB);
-        currentFrameResource->SecondHBAOConstantUploadBuffer->CopyData(0, hbaoCB);
     }
 }
 
