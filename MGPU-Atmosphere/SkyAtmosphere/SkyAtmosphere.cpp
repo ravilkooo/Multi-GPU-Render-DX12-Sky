@@ -115,18 +115,21 @@ void Atmosphere::SkyAtmosphere::InitRootSignatures()
     CD3DX12_DESCRIPTOR_RANGE srvRange3;
     CD3DX12_DESCRIPTOR_RANGE srvRange4;
     CD3DX12_DESCRIPTOR_RANGE srvRange5;
+    CD3DX12_DESCRIPTOR_RANGE srvRange6;
     srvRange0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, (UINT)TextureSlots::Transmittance, 0); // t0 transmittance
     srvRange1.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, (UINT)TextureSlots::Multiscat, 0); // t1 multiscat
     srvRange2.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, (UINT)TextureSlots::SkyView, 0); // t2, skyview
     srvRange3.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, (UINT)TextureSlots::Aerial, 0); // t3, aerial
     srvRange4.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, (UINT)TextureSlots::Shadow, 0); // t4, shadow
     srvRange5.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, (UINT)TextureSlots::Depth, 0); // t5, depth
+    srvRange6.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, (UINT)TextureSlots::TerrainRender, 0); // t6, terrain
     mRootSignature->AddDescriptorParameter(&srvRange0, 1);
     mRootSignature->AddDescriptorParameter(&srvRange1, 1);
     mRootSignature->AddDescriptorParameter(&srvRange2, 1);
     mRootSignature->AddDescriptorParameter(&srvRange3, 1);
     mRootSignature->AddDescriptorParameter(&srvRange4, 1);
     mRootSignature->AddDescriptorParameter(&srvRange5, 1);
+    mRootSignature->AddDescriptorParameter(&srvRange6, 1);
 
     CD3DX12_DESCRIPTOR_RANGE uavRange0;
     CD3DX12_DESCRIPTOR_RANGE uavRange1;
@@ -695,21 +698,22 @@ void Atmosphere::SkyAtmosphere::PopulateTerrainCommands(const std::shared_ptr<GC
 	cmdList->SetRenderTargets(1, &terrainRenderTargetRTV, 0, &depthMapDSV);
     
     cmdList->SetGraphicsRootDescriptorTable((UINT)CBSlots::Count + (UINT)TextureSlots::Transmittance, &mTransmittanceLutSRV);
-    // 13th root parameter
-    cmdList->SetGraphicsRootDescriptorTable(13, &mHeightMapTexSrv);
+
+    // 14th root parameter
+    cmdList->SetGraphicsRootDescriptorTable((UINT) CBSlots::Count + (UINT) TextureSlots::Count + (UINT) UavSlots::Count, &mHeightMapTexSrv);
 
 	cmdList->SetRootConstantBufferView((UINT)CBSlots::Common, *AtmosphereCommonConstantsCB);
 	cmdList->SetRootConstantBufferView((UINT)CBSlots::Atmosphere, *AtmosphereConstantsCB);
-	// 14th root parameter
-	cmdList->SetRootConstantBufferView(14, *mTerrainCB, 0);
+	// 15th root parameter
+	cmdList->SetRootConstantBufferView((UINT)CBSlots::Count + (UINT)TextureSlots::Count + (UINT)UavSlots::Count + 1, *mTerrainCB, 0);
 
 	cmdList->GetGraphicsCommandList()->IASetVertexBuffers(0, 0, nullptr);
 	cmdList->GetGraphicsCommandList()->IASetIndexBuffer(nullptr);
 	cmdList->GetGraphicsCommandList()->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 	cmdList->Draw(6, mTerrainResolution * mTerrainResolution);
 
-	cmdList->TransitionBarrier(*terrainRenderTarget.get(), D3D12_RESOURCE_STATE_GENERIC_READ);
-	cmdList->FlushResourceBarriers();
+	// cmdList->TransitionBarrier(*terrainRenderTarget.get(), D3D12_RESOURCE_STATE_GENERIC_READ);
+	// cmdList->FlushResourceBarriers();
 
 	cmdList->EndMark();
 }
@@ -862,6 +866,7 @@ void Atmosphere::SkyAtmosphere::PopulateRayMarchingCommands(const std::shared_pt
     cmdList->TransitionBarrier(*mAerialPerpspectiveLut, D3D12_RESOURCE_STATE_GENERIC_READ);
     cmdList->TransitionBarrier(*depthMap, D3D12_RESOURCE_STATE_GENERIC_READ);
     cmdList->TransitionBarrier(*mRayMarchingResult, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    cmdList->TransitionBarrier(*terrainRenderTarget, D3D12_RESOURCE_STATE_GENERIC_READ);
     cmdList->FlushResourceBarriers();
 
     // cmdList->SetComputeRootSignature(*mRootSignature);
@@ -869,6 +874,7 @@ void Atmosphere::SkyAtmosphere::PopulateRayMarchingCommands(const std::shared_pt
 
     cmdList->SetComputeRootDescriptorTable((UINT)CBSlots::Count + (UINT)TextureSlots::Aerial, &mAerialPerpspectiveLutSRV);
     cmdList->SetComputeRootDescriptorTable((UINT)CBSlots::Count + (UINT)TextureSlots::Depth, &depthMapSRV);
+    cmdList->SetComputeRootDescriptorTable((UINT)CBSlots::Count + (UINT)TextureSlots::TerrainRender, &terrainRenderTargetSRV);
 
     cmdList->SetComputeRootDescriptorTable((UINT)CBSlots::Count + (UINT)TextureSlots::Count + (UINT)UavSlots::RayMarching,
         &mRayMarchingResultUAV);

@@ -22,6 +22,13 @@ struct SingleScatteringResult
     float3 NewMultiScatStep1Out;
 };
 
+float4 BlendRayMarchTerrain(float4 rayM, float4 terrainR)
+{
+    // Blend: color = (src + (1-src.a) * dst)
+    // Blend: alpha = dst.a
+    return float4(rayM.rgb + (1 - rayM.a) * terrainR.rgb, terrainR.a);
+}
+
 SingleScatteringResult IntegrateScatteredLuminance(
 	in float2 pixPos, in float3 WorldPos, in float3 WorldDir, in float3 SunDir, in AtmosphereParameters Atmosphere,
 	in bool ground, in float SampleCountIni, in float DepthBufferValue, in bool VariableSampleCount,
@@ -307,6 +314,8 @@ void ComputeRayMarchingCS(uint3 dispatchThreadId : SV_DispatchThreadID)
         return;
     }
     
+    float4 terrainRender = terrainRenderTexture[pixPos];
+    
     AtmosphereParameters Atmosphere = GetAtmosphereParameters();
 
     float3 ClipSpace = float3((pixPos / rayMarchRes) * float2(2.0, -2.0) - float2(1.0, -1.0), 1.0);
@@ -345,7 +354,8 @@ void ComputeRayMarchingCS(uint3 dispatchThreadId : SV_DispatchThreadID)
 
 		//output.Luminance = float4(SkyViewLutTexture.SampleLevel(samplerLinearClamp, pixPos / rayMarchRes, 0).rgb + GetSunLuminance(WorldPos, WorldDir, Atmosphere.BottomRadius), 1.0);
 		output.Luminance = float4(SkyViewLutTexture.SampleLevel(samplerLinearClamp, uv, 0).rgb + GetSunLuminance(WorldPos, WorldDir, Atmosphere.BottomRadius), 1.0);
-		RayMarchingOut[dispatchThreadId.xy] = output.Luminance;
+    
+		RayMarchingOut[dispatchThreadId.xy] = BlendRayMarchTerrain(output.Luminance, terrainRender);
         return;
 	}
 #else
@@ -388,7 +398,7 @@ void ComputeRayMarchingCS(uint3 dispatchThreadId : SV_DispatchThreadID)
     {
 		// Ray is not intersecting the atmosphere		
         output.Luminance = float4(GetSunLuminance(WorldPos, WorldDir, Atmosphere.BottomRadius), 1.0);
-        RayMarchingOut[dispatchThreadId.xy] = output.Luminance;
+        RayMarchingOut[dispatchThreadId.xy] = BlendRayMarchTerrain(output.Luminance, terrainRender);
         return;
     }
 
@@ -413,7 +423,7 @@ void ComputeRayMarchingCS(uint3 dispatchThreadId : SV_DispatchThreadID)
 #endif // FASTAERIALPERSPECTIVE_ENABLED
 
     // output.Luminance.xyz = saturate(output.Luminance.xyz * 20);
-    RayMarchingOut[dispatchThreadId.xy] = output.Luminance;
+    RayMarchingOut[dispatchThreadId.xy] = BlendRayMarchTerrain(output.Luminance, terrainRender);
     return;
 }
 

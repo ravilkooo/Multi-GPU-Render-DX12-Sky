@@ -40,13 +40,7 @@ float4 PostProcessPS(PPVertexOut input) : SV_TARGET
 {
 	uint2 texCoord = input.PosH.xy;
 
-    float4 terrainRender = terrainTexture.Load(uint3(texCoord, 0));
     float4 rgbA = rayMarchingRes.Load(uint3(texCoord, 0));
-    
-    // Blend: color = (src + (1-src.a) * dst)
-    // Blend: alpha = dst.a
-    rgbA.rgb = rgbA.rgb + (1 - rgbA.a) * terrainRender.rgb;
-    rgbA.a = terrainRender.a;
     
 	rgbA /= rgbA.aaaa;	// Normalize according to sample count when path tracing
 

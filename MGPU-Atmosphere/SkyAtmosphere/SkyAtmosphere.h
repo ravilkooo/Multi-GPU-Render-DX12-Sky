@@ -155,7 +155,7 @@ namespace Atmosphere
         };
 
         enum class TextureSlots : UINT {
-            Transmittance = 0u, Multiscat, SkyView, Aerial, Shadow, Depth, Count
+            Transmittance = 0u, Multiscat, SkyView, Aerial, Shadow, Depth, TerrainRender, Count
         };
 
         enum class UavSlots : UINT {

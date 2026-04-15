@@ -6,13 +6,10 @@ class SkyAtmosphereRenderer :
 	CD3DX12_GPU_DESCRIPTOR_HANDLE rayMarchGpuTextureHandle{};
 	CD3DX12_CPU_DESCRIPTOR_HANDLE rayMarchCpuTextureHandle{};
 
-	CD3DX12_GPU_DESCRIPTOR_HANDLE terrainGpuTextureHandle{};
-	CD3DX12_CPU_DESCRIPTOR_HANDLE terrainCpuTextureHandle{};
-
 public:
 	SkyAtmosphereRenderer(const std::shared_ptr<GDevice>& device, const std::shared_ptr<GModel>& model,
 		GDescriptor* rayMarchSrvMemory, 
-		GDescriptor* terrainSrvMemory,
+
 		UINT offset = 0,
 		uint32_t terrainResolution = 512u);
 

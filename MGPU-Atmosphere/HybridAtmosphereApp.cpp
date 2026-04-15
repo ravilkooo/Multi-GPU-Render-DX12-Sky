@@ -646,7 +646,7 @@ void HybridAtmosphereApp::InitFrameResource()
 void HybridAtmosphereApp::InitRootSignature()
 {
     auto rootSignature = std::make_shared<GRootSignature>();
-    CD3DX12_DESCRIPTOR_RANGE texParam[6];
+    CD3DX12_DESCRIPTOR_RANGE texParam[5];
     texParam[0].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, StandardShaderSlot::SkyMap - 3, 0); //SkyMap
     texParam[1].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, StandardShaderSlot::ShadowMap - 3, 0); //ShadowMap
     texParam[2].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, StandardShaderSlot::AmbientMap - 3, 0); //SsaoMap
@@ -654,7 +654,6 @@ void HybridAtmosphereApp::InitRootSignature()
                      assets->GetLoadTexturesCount() > 0 ? assets->GetLoadTexturesCount() : 1,
                      StandardShaderSlot::TexturesMap - 3, 0);
     texParam[4].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0u, 2u); // RayMarching Result
-    texParam[5].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 1u, 2u); // Terrain
 
 
     rootSignature->AddConstantBufferParameter(0);
@@ -665,7 +664,6 @@ void HybridAtmosphereApp::InitRootSignature()
     rootSignature->AddDescriptorParameter(&texParam[2], 1, D3D12_SHADER_VISIBILITY_PIXEL);
     rootSignature->AddDescriptorParameter(&texParam[3], 1, D3D12_SHADER_VISIBILITY_PIXEL);
 	rootSignature->AddDescriptorParameter(&texParam[4], 1, D3D12_SHADER_VISIBILITY_PIXEL);
-	rootSignature->AddDescriptorParameter(&texParam[5], 1, D3D12_SHADER_VISIBILITY_PIXEL);
     rootSignature->Initialize(primeDevice);
 
     primeDeviceSignature = rootSignature;
@@ -1734,8 +1732,7 @@ void HybridAtmosphereApp::CreateAtmosphereGO()
     auto renderer = std::make_shared<SkyAtmosphereRenderer>(
         primeDevice,
         models[L"quad"],
-        skyAtmosphere->GetRayMarchTextureSrv(),
-        skyAtmosphere->GetTerrainRenderSrv()
+        skyAtmosphere->GetRayMarchTextureSrv()
     );
     atmospherePost->AddComponent(renderer);
     typedRenderer[static_cast<int>(RenderMode::AtmospherePostProcess)].push_back(renderer);
