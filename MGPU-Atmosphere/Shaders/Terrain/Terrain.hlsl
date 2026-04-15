@@ -4,15 +4,7 @@
 #include "../SkyAtmosphere/SkyAtmosphereCommon.hlsl"
 #include "../SkyAtmosphere/ComputeSkyCommon.hlsl"
 
-struct TerrainData
-{
-    float4x4 ViewProj;
-    float3 terrainPosDelta;
-    float pad;
-};
-
 Texture2D terrainHeightMap : register(t0, space1);
-ConstantBuffer<TerrainData> terrainBuffer : register(b2);
 
 // const static uint gTerrainResolution_ = 512;
 const static uint gTextureResolution = 512;
@@ -95,9 +87,9 @@ VertexOut TerrainVS(uint vertexId : SV_VertexID, uint instanceId : SV_InstanceID
     const float quady = quadId % gTerrainResolution;
 
     float4 WorldPos = SampleTerrain(quadx, quady, qp);
-    WorldPos.xyz += terrainBuffer.terrainPosDelta;
+    WorldPos.xyz += terrainPosDelta;
 
-    output.PosView = mul(terrainBuffer.ViewProj, WorldPos);
+    output.PosView = mul(gSkyViewProjMat, WorldPos);
 #ifndef DEPTH_PASS
     float2 Uvs = (float2(quadx, quady) + qp.xy) / gTerrainResolution / terrainWidth;
     output.PosW = WorldPos;

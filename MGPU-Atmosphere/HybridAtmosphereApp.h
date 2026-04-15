@@ -59,7 +59,6 @@ protected:
         DXGI_FORMAT depthStencilFormat);
 	void CreateAtmosphereGO();
 
-	void UpdateTerrain();
 	void UpdateAtmosphere();
 
     std::shared_ptr<Atmosphere::SkyAtmosphere> skyAtmosphere;
@@ -70,7 +69,8 @@ protected:
     */
 
     void Update(const GameTimer& gt) override;
-    void PopulateAtmosphereCommands(const std::shared_ptr<GCommandList>& cmdList);
+	void PopulateAtmosphereCommands(const std::shared_ptr<GCommandList>& cmdList,
+		const Atmosphere::SkyAtmosphereResources& Resources);
     void PopulateShadowMapCommands(const std::shared_ptr<GCommandList>& cmdList);
     void PopulateNormalMapCommands(const std::shared_ptr<GCommandList>& cmdList);
     void PopulateAmbientMapCommands(const std::shared_ptr<GCommandList>& cmdList) const;

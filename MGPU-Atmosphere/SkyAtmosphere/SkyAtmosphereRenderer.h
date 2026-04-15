@@ -8,8 +8,7 @@ class SkyAtmosphereRenderer :
 
 public:
 	SkyAtmosphereRenderer(const std::shared_ptr<GDevice>& device, const std::shared_ptr<GModel>& model,
-		GDescriptor* rayMarchSrvMemory, 
-
+		const GDescriptor* rayMarchSrvMemory,
 		UINT offset = 0,
 		uint32_t terrainResolution = 512u);
 

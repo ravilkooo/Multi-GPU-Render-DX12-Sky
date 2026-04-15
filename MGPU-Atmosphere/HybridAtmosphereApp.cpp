@@ -101,7 +101,6 @@ void HybridAtmosphereApp::Update(const GameTimer& gt)
     }
 
     UpdateAtmosphere();
-    UpdateTerrain();
 
     UpdateMaterials();
     UpdateShadowTransform(gt);
@@ -111,11 +110,6 @@ void HybridAtmosphereApp::Update(const GameTimer& gt)
     UIPath->Update();
     
     benchmark.Tick(gt.DeltaTime());
-}
-
-void HybridAtmosphereApp::UpdateTerrain()
-{
-    skyAtmosphere->UpdateTerrain();
 }
 
 void HybridAtmosphereApp::UpdateAtmosphere()
@@ -128,9 +122,11 @@ void HybridAtmosphereApp::UpdateAtmosphere()
 	// Vector3 camPos = camera->gameObject->GetTransform()->GetWorldPosition();
 
 	float atmosphereMoveSpeed = 1.0f;
+	float terrainMoveSpeed = 1.0f;
 	if (keyboard->KeyIsPressed(VK_SHIFT))
 	{
-        atmosphereMoveSpeed *= 10;
+		atmosphereMoveSpeed *= 10;
+		terrainMoveSpeed *= 10;
 	}
 	if (keyboard->KeyIsPressed('O'))
 	{
@@ -139,6 +135,31 @@ void HybridAtmosphereApp::UpdateAtmosphere()
 	if (keyboard->KeyIsPressed('L'))
 	{
         skyAtmosphere->mCamPosFinal.z -= atmosphereMoveSpeed * dt;
+	}
+
+	if (keyboard->KeyIsPressed('U'))
+	{
+        skyAtmosphere->terrainPos += terrainMoveSpeed * Vector3::Up * dt;
+    }
+    if (keyboard->KeyIsPressed('J'))
+    {
+        skyAtmosphere->terrainPos += terrainMoveSpeed * Vector3::Down * dt;
+    }
+    if (keyboard->KeyIsPressed('H'))
+    {
+        skyAtmosphere->terrainPos += terrainMoveSpeed * Vector3::Left * dt;
+    }
+    if (keyboard->KeyIsPressed('K'))
+    {
+        skyAtmosphere->terrainPos += terrainMoveSpeed * Vector3::Right * dt;
+    }
+    if (keyboard->KeyIsPressed('Y'))
+    {
+        skyAtmosphere->terrainPos += terrainMoveSpeed * Vector3::Forward * dt;
+    }
+    if (keyboard->KeyIsPressed('I'))
+    {
+        skyAtmosphere->terrainPos += terrainMoveSpeed * Vector3::Backward * dt;
 	}
 
     skyAtmosphere->mShadowmapViewProjMat = shadowPassCB.ViewProj;
@@ -190,27 +211,18 @@ void HybridAtmosphereApp::UpdateAtmosphere()
     skyAtmosphere->mCommonConstanants.timeSec = timer.TotalTime();
     skyAtmosphere->mCommonConstanants.frameId = gFrameId;
     skyAtmosphere->mCommonConstanants.screenshotCaptureActive = false;
+    skyAtmosphere->mCommonConstanants.terrainPosDelta = skyAtmosphere->terrainPos;
     skyAtmosphere->UpdateSkyAtmosphereBuffer(
         currentFrameResource->PrimeAtmosphereCommonUploadBuffer,
         currentFrameResource->PrimeAtmosphereUploadBuffer);
 }
 
-void HybridAtmosphereApp::PopulateAtmosphereCommands(const std::shared_ptr<GCommandList>& cmdList)
+void HybridAtmosphereApp::PopulateAtmosphereCommands(const std::shared_ptr<GCommandList>& cmdList,
+	const Atmosphere::SkyAtmosphereResources& Resources)
 {
-	skyAtmosphere->PopulateTransmittanceLutCommands(cmdList,
+    skyAtmosphere->Compute(cmdList,
 		currentFrameResource->PrimeAtmosphereCommonUploadBuffer,
-		currentFrameResource->PrimeAtmosphereUploadBuffer);
-
-    // Must be before RayMarchingCommands
-	skyAtmosphere->PopulateTerrainCommands(cmdList,
-		currentFrameResource->PrimeAtmosphereCommonUploadBuffer,
-		currentFrameResource->PrimeAtmosphereUploadBuffer);
-
-    skyAtmosphere->PopulateMultiScatLutCommands(cmdList);
-    skyAtmosphere->PopulateSkyViewLutCommands(cmdList);
-    skyAtmosphere->PopulateAerialPerspectiveCommands(cmdList);
-    
-	skyAtmosphere->PopulateRayMarchingCommands(cmdList);
+		currentFrameResource->PrimeAtmosphereUploadBuffer, Resources);
 }
 
 void HybridAtmosphereApp::PopulateShadowMapCommands(const std::shared_ptr<GCommandList>& cmdList)
@@ -448,7 +460,7 @@ void HybridAtmosphereApp::Draw(const GameTimer& gt)
     }
 
     // Must be before ForwardPathCommands
-    PopulateAtmosphereCommands(primeCmdList);
+    PopulateAtmosphereCommands(primeCmdList, skyAtmosphere->GetPrimeResources());
 
     PopulateNormalMapCommands(primeCmdList);
     PopulateAmbientMapCommands(primeCmdList);
@@ -1725,14 +1737,15 @@ void HybridAtmosphereApp::LoadAtmospherePostProcessPSO(std::shared_ptr<GRootSign
 
 void HybridAtmosphereApp::CreateAtmosphereGO()
 {
-	skyAtmosphere = std::make_shared<Atmosphere::SkyAtmosphere>(primeDevice);
+	skyAtmosphere = std::make_shared<Atmosphere::SkyAtmosphere>();
+    skyAtmosphere->Initialize(primeDevice, secondDevice);
 	gFrameId = 0u;
 
     auto atmospherePost = std::make_unique<GameObject>();
     auto renderer = std::make_shared<SkyAtmosphereRenderer>(
         primeDevice,
         models[L"quad"],
-        skyAtmosphere->GetRayMarchTextureSrv()
+        skyAtmosphere->GetPrimeResources().GetRayMarchingResultSRV()
     );
     atmospherePost->AddComponent(renderer);
     typedRenderer[static_cast<int>(RenderMode::AtmospherePostProcess)].push_back(renderer);

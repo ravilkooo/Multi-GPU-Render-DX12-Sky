@@ -29,6 +29,9 @@ cbuffer CONSTANT_BUFFER : register(b0)
 	
     uint2 gRayMarchingResolution;
     float2 pad;
+	
+    float3 terrainPosDelta;
+    float pad2;
 };
 
 /*

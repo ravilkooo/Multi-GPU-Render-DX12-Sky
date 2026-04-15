@@ -93,4 +93,7 @@ struct AtmosphereCommonConstants
 
 	unsigned int rayMarchingResolution[2];
 	float pad[2];
+	
+	Vector3 terrainPosDelta;
+	float pad2;
 };

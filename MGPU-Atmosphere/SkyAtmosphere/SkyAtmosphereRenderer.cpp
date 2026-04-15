@@ -5,7 +5,7 @@
 
 SkyAtmosphereRenderer::SkyAtmosphereRenderer(
 	const std::shared_ptr<GDevice>& device, const std::shared_ptr<GModel>& model,
-	GDescriptor* rayMarchSrvMemory,
+	const GDescriptor* rayMarchSrvMemory,
 	UINT offset, uint32_t terrainResolution) : ModelRenderer(device, model)
 {
 	rayMarchGpuTextureHandle = rayMarchSrvMemory->GetGPUHandle(offset);
