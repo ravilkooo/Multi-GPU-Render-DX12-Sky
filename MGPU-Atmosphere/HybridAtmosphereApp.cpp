@@ -139,27 +139,27 @@ void HybridAtmosphereApp::UpdateAtmosphere()
 
 	if (keyboard->KeyIsPressed('U'))
 	{
-        skyAtmosphere->terrainPos += terrainMoveSpeed * Vector3::Up * dt;
+        skyAtmosphere->mTerrainPos += terrainMoveSpeed * Vector3::Up * dt;
     }
     if (keyboard->KeyIsPressed('J'))
     {
-        skyAtmosphere->terrainPos += terrainMoveSpeed * Vector3::Down * dt;
+        skyAtmosphere->mTerrainPos += terrainMoveSpeed * Vector3::Down * dt;
     }
     if (keyboard->KeyIsPressed('H'))
     {
-        skyAtmosphere->terrainPos += terrainMoveSpeed * Vector3::Left * dt;
+        skyAtmosphere->mTerrainPos += terrainMoveSpeed * Vector3::Left * dt;
     }
     if (keyboard->KeyIsPressed('K'))
     {
-        skyAtmosphere->terrainPos += terrainMoveSpeed * Vector3::Right * dt;
+        skyAtmosphere->mTerrainPos += terrainMoveSpeed * Vector3::Right * dt;
     }
     if (keyboard->KeyIsPressed('Y'))
     {
-        skyAtmosphere->terrainPos += terrainMoveSpeed * Vector3::Forward * dt;
+        skyAtmosphere->mTerrainPos += terrainMoveSpeed * Vector3::Forward * dt;
     }
     if (keyboard->KeyIsPressed('I'))
     {
-        skyAtmosphere->terrainPos += terrainMoveSpeed * Vector3::Backward * dt;
+        skyAtmosphere->mTerrainPos += terrainMoveSpeed * Vector3::Backward * dt;
 	}
 
     skyAtmosphere->mShadowmapViewProjMat = shadowPassCB.ViewProj;
@@ -211,7 +211,7 @@ void HybridAtmosphereApp::UpdateAtmosphere()
     skyAtmosphere->mCommonConstanants.timeSec = timer.TotalTime();
     skyAtmosphere->mCommonConstanants.frameId = gFrameId;
     skyAtmosphere->mCommonConstanants.screenshotCaptureActive = false;
-    skyAtmosphere->mCommonConstanants.terrainPosDelta = skyAtmosphere->terrainPos;
+    skyAtmosphere->mCommonConstanants.terrainPosDelta = skyAtmosphere->mTerrainPos;
     skyAtmosphere->UpdateSkyAtmosphereBuffer(
         currentFrameResource->PrimeAtmosphereCommonUploadBuffer,
         currentFrameResource->PrimeAtmosphereUploadBuffer);
@@ -220,7 +220,12 @@ void HybridAtmosphereApp::UpdateAtmosphere()
 void HybridAtmosphereApp::PopulateAtmosphereCommands(const std::shared_ptr<GCommandList>& cmdList,
 	const Atmosphere::SkyAtmosphereResources& Resources)
 {
-    skyAtmosphere->Compute(cmdList,
+	// Must be before RayMarchingCommands
+	skyAtmosphere->PopulateTerrainCommands(cmdList,
+		currentFrameResource->PrimeAtmosphereCommonUploadBuffer,
+		currentFrameResource->PrimeAtmosphereUploadBuffer, Resources);
+
+    skyAtmosphere->ComputeAtmosphere(cmdList,
 		currentFrameResource->PrimeAtmosphereCommonUploadBuffer,
 		currentFrameResource->PrimeAtmosphereUploadBuffer, Resources);
 }

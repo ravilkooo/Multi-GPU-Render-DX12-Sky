@@ -17,6 +17,8 @@ using namespace Graphics;
 
 namespace Atmosphere
 {
+    class SkyAtmosphereResources;
+
     struct DensityProfileLayer
     {
         float width;
@@ -101,10 +103,16 @@ namespace Atmosphere
 
 	class SkyAtmosphereCrossResources
 	{
+		// From Prime to Second
+        std::shared_ptr<GCrossAdapterResource> mTerrainRenderTarget;
+		std::shared_ptr<GCrossAdapterResource> mDepthMap;
+
+        // From Second to Prime
 		std::shared_ptr<GCrossAdapterResource> mRayMarchingResult;
+		std::shared_ptr<GCrossAdapterResource> mTransmittanceLut;
 
 	public:
-		void Initialize(D3D12_RESOURCE_DESC resourcesDesc, const std::shared_ptr<GDevice>& primeDevice, const std::shared_ptr<GDevice>& secondDevice);
+		void Initialize(const SkyAtmosphereResources& Resources, const std::shared_ptr<GDevice>& primeDevice, const std::shared_ptr<GDevice>& secondDevice);
 
 		void OnResize(uint32_t width, uint32_t height) const;
 
@@ -119,21 +127,21 @@ namespace Atmosphere
         custom_unordered_map<std::string, std::shared_ptr<GShader>> mAtmosphereShaders =
             MemoryAllocator::CreateUnorderedMap<std::string, std::shared_ptr<GShader>>();
 
-		std::shared_ptr<ComputePSO> ComputeTransmittancePSO;
-		std::shared_ptr<ComputePSO> ComputeMultiscatPSO;
-		std::shared_ptr<ComputePSO> ComputeSkyviewPSO;
-		std::shared_ptr<ComputePSO> ComputeAerialPSO;
-		std::shared_ptr<ComputePSO> ComputeRaymarchPSO;
+		std::shared_ptr<ComputePSO> mComputeTransmittancePSO;
+		std::shared_ptr<ComputePSO> mComputeMultiscatPSO;
+		std::shared_ptr<ComputePSO> mComputeSkyviewPSO;
+		std::shared_ptr<ComputePSO> mComputeAerialPSO;
+		std::shared_ptr<ComputePSO> mComputeRaymarchPSO;
 
         std::shared_ptr<GraphicPSO> mTerrainPSO;
 		
-        std::shared_ptr<GTexture> terrainRenderTarget;
-		GDescriptor terrainRenderTargetSRV;
-		GDescriptor terrainRenderTargetRTV;
+        std::shared_ptr<GTexture> mTerrainRenderTarget;
+		GDescriptor mTerrainRenderTargetSRV;
+		GDescriptor mTerrainRenderTargetRTV;
 
-        std::shared_ptr<GTexture> depthMap;
-		GDescriptor depthMapSRV;
-		GDescriptor depthMapDSV;
+        std::shared_ptr<GTexture> mDepthMap;
+		GDescriptor mDepthMapSRV;
+		GDescriptor mDepthMapDSV;
 
         std::shared_ptr<GTexture> mTransmittanceLut;
         GDescriptor mTransmittanceLutUAV;
@@ -193,17 +201,17 @@ namespace Atmosphere
 		const GRootSignature& GetRootSignature() const { return *mRootSignature.get(); }
 		const GraphicPSO& GetTerrainPSO() const { return *mTerrainPSO.get(); }
 
-		const ComputePSO& GetComputeTransmittancePSO() const { return *ComputeTransmittancePSO.get(); }
-        const ComputePSO& GetComputeMultiscatPSO() const { return *ComputeMultiscatPSO.get(); }
-        const ComputePSO& GetComputeSkyviewPSO() const { return *ComputeSkyviewPSO.get(); }
-        const ComputePSO& GetComputeAerialPSO() const { return *ComputeAerialPSO.get(); }
-        const ComputePSO& GetComputeRaymarchPSO() const { return *ComputeRaymarchPSO.get(); }
+		const ComputePSO& GetComputeTransmittancePSO() const { return *mComputeTransmittancePSO.get(); }
+        const ComputePSO& GetComputeMultiscatPSO() const { return *mComputeMultiscatPSO.get(); }
+        const ComputePSO& GetComputeSkyviewPSO() const { return *mComputeSkyviewPSO.get(); }
+        const ComputePSO& GetComputeAerialPSO() const { return *mComputeAerialPSO.get(); }
+        const ComputePSO& GetComputeRaymarchPSO() const { return *mComputeRaymarchPSO.get(); }
 
 		// std::shared_ptr<GShader> GetAtmosphereShaders(std::string shaderName) { return mAtmosphereShaders[shaderName]; }
         // ComputePSO& GetComputePSO(std::string PsoName) const { return *mAtmospherePSOs[PsoName].get(); }
 
-		const GTexture& GetTerrainRender() const { return *terrainRenderTarget.get(); }
-        const GTexture& GetDepthMap() const { return *depthMap.get(); }
+		const GTexture& GetTerrainRender() const { return *mTerrainRenderTarget.get(); }
+        const GTexture& GetDepthMap() const { return *mDepthMap.get(); }
         const GTexture& GetTransmittanceLut() const { return *mTransmittanceLut.get(); }
         const GTexture& GetMultiScatLut() const { return *mMultiScatLut.get(); }
         const GTexture& GetSkyViewLut() const { return *mSkyViewLut.get(); }
@@ -211,8 +219,8 @@ namespace Atmosphere
         const GTexture& GetRayMarchingResult() const { return *mRayMarchingResult.get(); }
         const GTexture& GetHeightMapTex() const { return *mHeightMapTex.get(); }
 
-        const GDescriptor* GetTerrainRenderSRV() const { return &terrainRenderTargetSRV; }
-        const GDescriptor* GetDepthMapSRV() const { return &depthMapSRV; }
+        const GDescriptor* GetTerrainRenderSRV() const { return &mTerrainRenderTargetSRV; }
+        const GDescriptor* GetDepthMapSRV() const { return &mDepthMapSRV; }
         const GDescriptor* GetTransmittanceLutSRV() const { return &mTransmittanceLutSRV; }
         const GDescriptor* GetMultiScatLutSRV() const { return &mMultiScatLutSRV; }
         const GDescriptor* GetSkyViewLutSRV() const { return &mSkyViewLutSRV; }
@@ -220,8 +228,8 @@ namespace Atmosphere
         const GDescriptor* GetRayMarchingResultSRV() const { return &mRayMarchingResultSRV; }
         const GDescriptor* GetHeightMapTexSRV() const { return &mHeightMapTexSRV; }
 
-        const GDescriptor* GetTerrainRenderRTV() const { return &terrainRenderTargetRTV; }
-        const GDescriptor* GetDepthMapDSV() const { return &depthMapDSV; }
+        const GDescriptor* GetTerrainRenderRTV() const { return &mTerrainRenderTargetRTV; }
+        const GDescriptor* GetDepthMapDSV() const { return &mDepthMapDSV; }
         const GDescriptor* GetTransmittanceLutUAV() const { return &mTransmittanceLutUAV; }
         const GDescriptor* GetMultiScatLutUAV() const { return &mMultiScatLutUAV; }
         const GDescriptor* GetSkyViewLutUAV() const { return &mSkyViewLutUAV; }
@@ -240,12 +248,12 @@ namespace Atmosphere
         /*
         * Prime/second resources
         */
-        SkyAtmosphereResources primeResources;
-        SkyAtmosphereResources secondResources;
+        SkyAtmosphereResources mPrimeResources;
+        SkyAtmosphereResources mSecondResources;
         /*
         * Shared resources
 		*/
-        SkyAtmosphereCrossResources crossResources;
+        SkyAtmosphereCrossResources mCrossResources;
 
 	public:
 
@@ -264,7 +272,7 @@ namespace Atmosphere
         int viewRayMarchMinSPP = 4;
 		int viewRayMarchMaxSPP = 14;
 
-		Vector3 terrainPos = Vector3(-1.02f, -0.33f, -2.38f);
+		Vector3 mTerrainPos = Vector3(-1.02f, -0.33f, -2.38f);
 
         AtmosphereCommonConstants mCommonConstanants;
 
@@ -276,15 +284,15 @@ namespace Atmosphere
 
         void InitAtmosphereData();
 
-		const SkyAtmosphereResources& GetPrimeResources() { return primeResources; }
-        const SkyAtmosphereResources& GetSecondResource() { return secondResources; }
-		const SkyAtmosphereCrossResources& GetCrossResources() { return crossResources; }
+		const SkyAtmosphereResources& GetPrimeResources() { return mPrimeResources; }
+        const SkyAtmosphereResources& GetSecondResource() { return mSecondResources; }
+		const SkyAtmosphereCrossResources& GetCrossResources() { return mCrossResources; }
 
 		void UpdateSkyAtmosphereBuffer(
             const std::shared_ptr<ConstantUploadBuffer<AtmosphereCommonConstants>>& AtmosphereCommonConstantsCB,
 			const std::shared_ptr<ConstantUploadBuffer<AtmosphereConstants>>& AtmosphereConstantsCB);
 
-		void Compute(const std::shared_ptr<GCommandList>& cmdList,
+		void ComputeAtmosphere(const std::shared_ptr<GCommandList>& cmdList,
 			const std::shared_ptr<ConstantUploadBuffer<AtmosphereCommonConstants>>& AtmosphereCommonConstantsCB,
 			const std::shared_ptr<ConstantUploadBuffer<AtmosphereConstants>>& AtmosphereConstantsCB,
             const SkyAtmosphereResources& Resources);

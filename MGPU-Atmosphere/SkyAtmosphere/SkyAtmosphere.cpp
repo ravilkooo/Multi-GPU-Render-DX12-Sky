@@ -20,8 +20,8 @@ namespace Atmosphere
 
 	    InitAtmosphereData();
 
-        primeResources.Initialize(primeDevice, screenWidth, screenHeight, terrainResolution);
-        secondResources.Initialize(secondDevice, screenWidth, screenHeight, terrainResolution);
+        mPrimeResources.Initialize(primeDevice, screenWidth, screenHeight, terrainResolution);
+        mSecondResources.Initialize(secondDevice, screenWidth, screenHeight, terrainResolution);
     }
 
     void SkyAtmosphere::OnResize(const UINT newScreenWidth, const UINT newScreenHeight)
@@ -303,31 +303,31 @@ namespace Atmosphere
         Compute PSOs
         */
 
-        ComputeTransmittancePSO = std::make_shared<ComputePSO>();
-        ComputeTransmittancePSO->SetShader(mAtmosphereShaders["transmittanceCS"].get());
-        ComputeTransmittancePSO->SetRootSignature(*mRootSignature);
+        mComputeTransmittancePSO = std::make_shared<ComputePSO>();
+        mComputeTransmittancePSO->SetShader(mAtmosphereShaders["transmittanceCS"].get());
+        mComputeTransmittancePSO->SetRootSignature(*mRootSignature);
     
-        ComputeMultiscatPSO = std::make_shared<ComputePSO>();
-        ComputeMultiscatPSO->SetShader(mAtmosphereShaders["multiscatCS"].get());
-        ComputeMultiscatPSO->SetRootSignature(*mRootSignature);
+        mComputeMultiscatPSO = std::make_shared<ComputePSO>();
+        mComputeMultiscatPSO->SetShader(mAtmosphereShaders["multiscatCS"].get());
+        mComputeMultiscatPSO->SetRootSignature(*mRootSignature);
 
-        ComputeSkyviewPSO = std::make_shared<ComputePSO>();
-        ComputeSkyviewPSO->SetShader(mAtmosphereShaders["skyViewLutCS"].get());
-        ComputeSkyviewPSO->SetRootSignature(*mRootSignature);
+        mComputeSkyviewPSO = std::make_shared<ComputePSO>();
+        mComputeSkyviewPSO->SetShader(mAtmosphereShaders["skyViewLutCS"].get());
+        mComputeSkyviewPSO->SetRootSignature(*mRootSignature);
 
-        ComputeAerialPSO = std::make_shared<ComputePSO>();
-        ComputeAerialPSO->SetShader(mAtmosphereShaders["aerialPerspCS"].get());
-        ComputeAerialPSO->SetRootSignature(*mRootSignature);
+        mComputeAerialPSO = std::make_shared<ComputePSO>();
+        mComputeAerialPSO->SetShader(mAtmosphereShaders["aerialPerspCS"].get());
+        mComputeAerialPSO->SetRootSignature(*mRootSignature);
 
-        ComputeRaymarchPSO = std::make_shared<ComputePSO>();
-        ComputeRaymarchPSO->SetShader(mAtmosphereShaders["rayMarchCS"].get());
-        ComputeRaymarchPSO->SetRootSignature(*mRootSignature);
+        mComputeRaymarchPSO = std::make_shared<ComputePSO>();
+        mComputeRaymarchPSO->SetShader(mAtmosphereShaders["rayMarchCS"].get());
+        mComputeRaymarchPSO->SetRootSignature(*mRootSignature);
 
-		ComputeTransmittancePSO->Initialize(mDevice);
-        ComputeMultiscatPSO->Initialize(mDevice);
-        ComputeSkyviewPSO->Initialize(mDevice);
-        ComputeAerialPSO->Initialize(mDevice);
-        ComputeRaymarchPSO->Initialize(mDevice);
+		mComputeTransmittancePSO->Initialize(mDevice);
+        mComputeMultiscatPSO->Initialize(mDevice);
+        mComputeSkyviewPSO->Initialize(mDevice);
+        mComputeAerialPSO->Initialize(mDevice);
+        mComputeRaymarchPSO->Initialize(mDevice);
     }
 
     void SkyAtmosphereResources::LoadResources()
@@ -358,18 +358,18 @@ namespace Atmosphere
 	    D3D12_CLEAR_VALUE optClear;
 	    optClear = CD3DX12_CLEAR_VALUE(BackBufferFormat, DirectX::Colors::Black);
 
-        terrainRenderTarget = std::make_shared<GTexture>(mDevice, renderTargetDesc,
+        mTerrainRenderTarget = std::make_shared<GTexture>(mDevice, renderTargetDesc,
             L"Terrain RTV", TextureUsage::RenderTarget, &optClear);
 
-        terrainRenderTargetRTV = mDevice->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, 1);
-        terrainRenderTargetSRV = mDevice->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 1);
+        mTerrainRenderTargetRTV = mDevice->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, 1);
+        mTerrainRenderTargetSRV = mDevice->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 1);
 
 	    D3D12_RENDER_TARGET_VIEW_DESC rtvDesc = {};
 	    rtvDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
 	    rtvDesc.Format = BackBufferFormat;
 	    rtvDesc.Texture2D.MipSlice = 0;
 	    rtvDesc.Texture2D.PlaneSlice = 0;
-        terrainRenderTarget->CreateRenderTargetView(&rtvDesc, &terrainRenderTargetRTV);
+        mTerrainRenderTarget->CreateRenderTargetView(&rtvDesc, &mTerrainRenderTargetRTV);
 
 	    D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
 	    srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
@@ -377,7 +377,7 @@ namespace Atmosphere
 	    srvDesc.Format = BackBufferFormat;
 	    srvDesc.Texture2D.MostDetailedMip = 0;
 	    srvDesc.Texture2D.MipLevels = 1;
-        terrainRenderTarget->CreateShaderResourceView(&srvDesc, &terrainRenderTargetSRV);
+        mTerrainRenderTarget->CreateShaderResourceView(&srvDesc, &mTerrainRenderTargetSRV);
 
 
 
@@ -398,19 +398,19 @@ namespace Atmosphere
 	    optClear.Format = DXGI_FORMAT_D32_FLOAT;
 	    optClear.DepthStencil.Depth = 1.0f;
 
-        depthMap = std::make_shared<GTexture>(mDevice, texDesc,
+        mDepthMap = std::make_shared<GTexture>(mDevice, texDesc,
 		    L"Terrain Depth Map " + mDevice->GetName(),
 		    TextureUsage::Depth, &optClear);
 
-	    depthMapSRV = mDevice->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 1);
-	    depthMapDSV = mDevice->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_DSV, 1);
+	    mDepthMapSRV = mDevice->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 1);
+	    mDepthMapDSV = mDevice->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_DSV, 1);
 
 	    D3D12_DEPTH_STENCIL_VIEW_DESC dsvDesc;
 	    dsvDesc.Flags = D3D12_DSV_FLAG_NONE;
 	    dsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
 	    dsvDesc.Format = DXGI_FORMAT_D32_FLOAT;
 	    dsvDesc.Texture2D.MipSlice = 0;
-	    depthMap->CreateDepthStencilView(&dsvDesc, &depthMapDSV);
+	    mDepthMap->CreateDepthStencilView(&dsvDesc, &mDepthMapDSV);
 
 	    srvDesc = {};
 	    srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
@@ -418,7 +418,7 @@ namespace Atmosphere
 	    srvDesc.Texture2D.MostDetailedMip = 0;
 	    srvDesc.Texture2D.MipLevels = 1;
 	    srvDesc.Format = DXGI_FORMAT_R32_FLOAT;
-	    depthMap->CreateShaderResourceView(&srvDesc, &depthMapSRV);
+	    mDepthMap->CreateShaderResourceView(&srvDesc, &mDepthMapSRV);
 
 	    // Height Map
 	    auto queue = mDevice->GetCommandQueue(GQueueType::Compute);
@@ -656,17 +656,12 @@ namespace Atmosphere
         mRayMarchingResult->CreateShaderResourceView(&srvDesc, &mRayMarchingResultSRV);
     }
 
-    void SkyAtmosphere::Compute(const std::shared_ptr<GCommandList>& cmdList,
+    void SkyAtmosphere::ComputeAtmosphere(const std::shared_ptr<GCommandList>& cmdList,
         const std::shared_ptr<ConstantUploadBuffer<AtmosphereCommonConstants>>& AtmosphereCommonConstantsCB,
 	    const std::shared_ptr<ConstantUploadBuffer<AtmosphereConstants>>& AtmosphereConstantsCB,
 	    const SkyAtmosphereResources& Resources)
-    {
+	{
 	    PopulateTransmittanceLutCommands(cmdList,
-            AtmosphereCommonConstantsCB,
-            AtmosphereConstantsCB, Resources);
-
-        // Must be before RayMarchingCommands
-        PopulateTerrainCommands(cmdList,
             AtmosphereCommonConstantsCB,
             AtmosphereConstantsCB, Resources);
 
@@ -716,7 +711,7 @@ namespace Atmosphere
 	    cmdList->GetGraphicsCommandList()->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 	    cmdList->Draw(6, mTerrainResolution * mTerrainResolution);
 
-	    // cmdList->TransitionBarrier(*terrainRenderTarget.get(), D3D12_RESOURCE_STATE_GENERIC_READ);
+	    // cmdList->TransitionBarrier(*mTerrainRenderTarget.get(), D3D12_RESOURCE_STATE_GENERIC_READ);
 	    // cmdList->FlushResourceBarriers();
 
 	    cmdList->EndMark();
@@ -736,7 +731,7 @@ namespace Atmosphere
         cmdList->FlushResourceBarriers();
 
         // Bind root signature and atmosphere CBs
-        cmdList->SetComputeRootSignature(Resources.GetRootSignature());
+        cmdList->GetGraphicsCommandList()->SetComputeRootSignature(Resources.GetRootSignature().GetNativeSignature().Get());
         cmdList->SetPipelineState(Resources.GetComputeTransmittancePSO());
     
         cmdList->SetComputeRootConstantBufferView((UINT)CBSlots::Common, *AtmosphereCommonConstantsCB);
@@ -778,7 +773,7 @@ namespace Atmosphere
         cmdList->Dispatch(MultiScatteringLUTRes, MultiScatteringLUTRes, 1);
 
         // cmdList->TransitionBarrier(*mMultiScatLut, D3D12_RESOURCE_STATE_COMMON);
-        cmdList->FlushResourceBarriers();
+        // cmdList->FlushResourceBarriers();
         cmdList->EndMark();
     }
 
@@ -845,8 +840,6 @@ namespace Atmosphere
         auto tgz = IntDivRoundUp(32, 1);
         cmdList->Dispatch(tgx, tgy, tgz);
 
-        cmdList->TransitionBarrier(Resources.GetAerialPerpspectiveLut(), D3D12_RESOURCE_STATE_COMMON);
-        cmdList->FlushResourceBarriers();
         cmdList->EndMark();
     }
 
@@ -861,8 +854,8 @@ namespace Atmosphere
         // cmdList->TransitionBarrier(*mMultiScatLut, D3D12_RESOURCE_STATE_GENERIC_READ);
         cmdList->TransitionBarrier(Resources.GetAerialPerpspectiveLut(), D3D12_RESOURCE_STATE_GENERIC_READ);
         cmdList->TransitionBarrier(Resources.GetDepthMap(), D3D12_RESOURCE_STATE_GENERIC_READ);
-        cmdList->TransitionBarrier(Resources.GetRayMarchingResult(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
         cmdList->TransitionBarrier(Resources.GetTerrainRender(), D3D12_RESOURCE_STATE_GENERIC_READ);
+        cmdList->TransitionBarrier(Resources.GetRayMarchingResult(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
         cmdList->FlushResourceBarriers();
 
         // cmdList->SetComputeRootSignature(*mRootSignature);
@@ -967,9 +960,12 @@ namespace Atmosphere
             AtmosphereCommonConstantsCB->CopyData(0, mCommonConstanants);
     }
 
-    void SkyAtmosphereCrossResources::Initialize(D3D12_RESOURCE_DESC resourcesDesc, const std::shared_ptr<GDevice>& primeDevice, const std::shared_ptr<GDevice>& secondDevice)
+    void SkyAtmosphereCrossResources::Initialize(const SkyAtmosphereResources& Resources, const std::shared_ptr<GDevice>& primeDevice, const std::shared_ptr<GDevice>& secondDevice)
     {
-        mRayMarchingResult = std::make_shared<GCrossAdapterResource>(resourcesDesc, primeDevice, secondDevice);
+        mRayMarchingResult = std::make_shared<GCrossAdapterResource>(Resources.GetRayMarchingResult().GetD3D12ResourceDesc(), primeDevice, secondDevice);
+        mTerrainRenderTarget = std::make_shared<GCrossAdapterResource>(Resources.GetTerrainRender().GetD3D12ResourceDesc(), primeDevice, secondDevice);
+        mDepthMap = std::make_shared<GCrossAdapterResource>(Resources.GetDepthMap().GetD3D12ResourceDesc(), primeDevice, secondDevice);
+        mTransmittanceLut = std::make_shared<GCrossAdapterResource>(Resources.GetTransmittanceLut().GetD3D12ResourceDesc(), primeDevice, secondDevice);
     }
 
     void SkyAtmosphereCrossResources::OnResize(uint32_t width, uint32_t height) const
