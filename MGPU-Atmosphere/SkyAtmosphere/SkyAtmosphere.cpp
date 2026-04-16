@@ -22,6 +22,8 @@ namespace Atmosphere
 
         mPrimeResources.Initialize(primeDevice, screenWidth, screenHeight, terrainResolution);
         mSecondResources.Initialize(secondDevice, screenWidth, screenHeight, terrainResolution);
+
+        mCrossResources.Initialize(mPrimeResources, primeDevice, secondDevice);
     }
 
     void SkyAtmosphere::OnResize(const UINT newScreenWidth, const UINT newScreenHeight)
@@ -353,7 +355,7 @@ namespace Atmosphere
 	    renderTargetDesc.SampleDesc.Count = 1;
 	    renderTargetDesc.SampleDesc.Quality = 0;
 	    renderTargetDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
-	    renderTargetDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+        renderTargetDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET | D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
 
 	    D3D12_CLEAR_VALUE optClear;
 	    optClear = CD3DX12_CLEAR_VALUE(BackBufferFormat, DirectX::Colors::Black);
@@ -733,6 +735,7 @@ namespace Atmosphere
         // Bind root signature and atmosphere CBs
         cmdList->GetGraphicsCommandList()->SetComputeRootSignature(Resources.GetRootSignature().GetNativeSignature().Get());
         cmdList->SetPipelineState(Resources.GetComputeTransmittancePSO());
+        cmdList->SetDescriptorsHeap(Resources.GetRayMarchingResultSRV());
     
         cmdList->SetComputeRootConstantBufferView((UINT)CBSlots::Common, *AtmosphereCommonConstantsCB);
         cmdList->SetComputeRootConstantBufferView((UINT)CBSlots::Atmosphere, *AtmosphereConstantsCB);
@@ -881,91 +884,87 @@ namespace Atmosphere
         cmdList->EndMark();
     }
 
-    void SkyAtmosphere::UpdateSkyAtmosphereBuffer(
-	    const std::shared_ptr<ConstantUploadBuffer<AtmosphereCommonConstants>>& AtmosphereCommonConstantsCB,
-	    const std::shared_ptr<ConstantUploadBuffer<AtmosphereConstants>>& AtmosphereConstantsCB)
+    void SkyAtmosphere::UpdateSkyAtmosphereBuffer()
     {
         // Populate AtmosphereConstants with sensible defaults / current values and upload to GPU
-        AtmosphereConstants cb;
+        
         // Fill with a pattern like the original project to help detect uninitialized fields in debug
-        //memset(&cb, 0xBA, sizeof(AtmosphereConstants));
+        //memset(&mAtmosphereConstants, 0xBA, sizeof(AtmosphereConstants));
 
         // Match initialization values used in InitTransmittanceLutPass and Game::updateSkyAtmosphereConstant
-        cb.solar_irradiance = mAtmosphereInfos.solar_irradiance;
-        cb.sun_angular_radius = mAtmosphereInfos.sun_angular_radius;
-        cb.absorption_extinction = mAtmosphereInfos.absorption_extinction;
-        cb.mu_s_min = mAtmosphereInfos.mu_s_min;
+        mAtmosphereConstants.solar_irradiance = mAtmosphereInfos.solar_irradiance;
+        mAtmosphereConstants.sun_angular_radius = mAtmosphereInfos.sun_angular_radius;
+        mAtmosphereConstants.absorption_extinction = mAtmosphereInfos.absorption_extinction;
+        mAtmosphereConstants.mu_s_min = mAtmosphereInfos.mu_s_min;
 
-        memcpy(cb.rayleigh_density, &mAtmosphereInfos.rayleigh_density, sizeof(mAtmosphereInfos.rayleigh_density));
-        memcpy(cb.mie_density, &mAtmosphereInfos.mie_density, sizeof(mAtmosphereInfos.mie_density));
-        memcpy(cb.absorption_density, &mAtmosphereInfos.absorption_density, sizeof(mAtmosphereInfos.absorption_density));
+        memcpy(mAtmosphereConstants.rayleigh_density, &mAtmosphereInfos.rayleigh_density, sizeof(mAtmosphereInfos.rayleigh_density));
+        memcpy(mAtmosphereConstants.mie_density, &mAtmosphereInfos.mie_density, sizeof(mAtmosphereInfos.mie_density));
+        memcpy(mAtmosphereConstants.absorption_density, &mAtmosphereInfos.absorption_density, sizeof(mAtmosphereInfos.absorption_density));
 
-        cb.mie_phase_function_g = mAtmosphereInfos.mie_phase_function_g;
-        cb.rayleigh_scattering = mAtmosphereInfos.rayleigh_scattering;
+        mAtmosphereConstants.mie_phase_function_g = mAtmosphereInfos.mie_phase_function_g;
+        mAtmosphereConstants.rayleigh_scattering = mAtmosphereInfos.rayleigh_scattering;
         const float RayleighScatScale = 1.0f;
-        cb.rayleigh_scattering.x *= RayleighScatScale;
-        cb.rayleigh_scattering.y *= RayleighScatScale;
-        cb.rayleigh_scattering.z *= RayleighScatScale;
-        cb.mie_scattering = mAtmosphereInfos.mie_scattering;
+        mAtmosphereConstants.rayleigh_scattering.x *= RayleighScatScale;
+        mAtmosphereConstants.rayleigh_scattering.y *= RayleighScatScale;
+        mAtmosphereConstants.rayleigh_scattering.z *= RayleighScatScale;
+        mAtmosphereConstants.mie_scattering = mAtmosphereInfos.mie_scattering;
 
         auto MaxZero3 = [](Vector3& a) {Vector3 r; r.x = a.x > 0.0f ? a.x : 0.0f; r.y = a.y > 0.0f ? a.y : 0.0f; r.z = a.z > 0.0f ? a.z : 0.0f; return r; };
-        cb.mie_absorption = MaxZero3(mAtmosphereInfos.mie_extinction - mAtmosphereInfos.mie_scattering);
-        cb.mie_extinction = mAtmosphereInfos.mie_extinction;
-        cb.ground_albedo = mAtmosphereInfos.ground_albedo;
-        cb.bottom_radius = mAtmosphereInfos.bottom_radius;
-        cb.top_radius = mAtmosphereInfos.top_radius;
-        cb.MultipleScatteringFactor = 1;
-        cb.MultiScatteringLUTRes = mCommonConstanants.multiScatLutResolution[0];
+        mAtmosphereConstants.mie_absorption = MaxZero3(mAtmosphereInfos.mie_extinction - mAtmosphereInfos.mie_scattering);
+        mAtmosphereConstants.mie_extinction = mAtmosphereInfos.mie_extinction;
+        mAtmosphereConstants.ground_albedo = mAtmosphereInfos.ground_albedo;
+        mAtmosphereConstants.bottom_radius = mAtmosphereInfos.bottom_radius;
+        mAtmosphereConstants.top_radius = mAtmosphereInfos.top_radius;
+        mAtmosphereConstants.MultipleScatteringFactor = 1;
+        mAtmosphereConstants.MultiScatteringLUTRes = mCommonConstanants.multiScatLutResolution[0];
 
         //
-        // cb.TRANSMITTANCE_TEXTURE_WIDTH = mLutInfos.TRANSMITTANCE_TEXTURE_WIDTH;
-        // cb.TRANSMITTANCE_TEXTURE_HEIGHT = mLutInfos.TRANSMITTANCE_TEXTURE_HEIGHT;
-        // cb.IRRADIANCE_TEXTURE_WIDTH = mLutInfos.IRRADIANCE_TEXTURE_WIDTH;
-        // cb.IRRADIANCE_TEXTURE_HEIGHT = mLutInfos.IRRADIANCE_TEXTURE_HEIGHT;
-        // cb.SCATTERING_TEXTURE_R_SIZE = mLutInfos.SCATTERING_TEXTURE_R_SIZE;
-        // cb.SCATTERING_TEXTURE_MU_SIZE = mLutInfos.SCATTERING_TEXTURE_MU_SIZE;
-        // cb.SCATTERING_TEXTURE_MU_S_SIZE = mLutInfos.SCATTERING_TEXTURE_MU_S_SIZE;
-        // cb.SCATTERING_TEXTURE_NU_SIZE = mLutInfos.SCATTERING_TEXTURE_NU_SIZE;
-        cb.SKY_SPECTRAL_RADIANCE_TO_LUMINANCE = Vector3(114974.916437f, 71305.954816f, 65310.548555f); // Not used if using LUTs as transfert
-        cb.SUN_SPECTRAL_RADIANCE_TO_LUMINANCE = Vector3(98242.786222f, 69954.398112f, 66475.012354f);  // idem
+        // mAtmosphereConstants.TRANSMITTANCE_TEXTURE_WIDTH = mLutInfos.TRANSMITTANCE_TEXTURE_WIDTH;
+        // mAtmosphereConstants.TRANSMITTANCE_TEXTURE_HEIGHT = mLutInfos.TRANSMITTANCE_TEXTURE_HEIGHT;
+        // mAtmosphereConstants.IRRADIANCE_TEXTURE_WIDTH = mLutInfos.IRRADIANCE_TEXTURE_WIDTH;
+        // mAtmosphereConstants.IRRADIANCE_TEXTURE_HEIGHT = mLutInfos.IRRADIANCE_TEXTURE_HEIGHT;
+        // mAtmosphereConstants.SCATTERING_TEXTURE_R_SIZE = mLutInfos.SCATTERING_TEXTURE_R_SIZE;
+        // mAtmosphereConstants.SCATTERING_TEXTURE_MU_SIZE = mLutInfos.SCATTERING_TEXTURE_MU_SIZE;
+        // mAtmosphereConstants.SCATTERING_TEXTURE_MU_S_SIZE = mLutInfos.SCATTERING_TEXTURE_MU_S_SIZE;
+        // mAtmosphereConstants.SCATTERING_TEXTURE_NU_SIZE = mLutInfos.SCATTERING_TEXTURE_NU_SIZE;
+        mAtmosphereConstants.SKY_SPECTRAL_RADIANCE_TO_LUMINANCE = Vector3(114974.916437f, 71305.954816f, 65310.548555f); // Not used if using LUTs as transfert
+        mAtmosphereConstants.SUN_SPECTRAL_RADIANCE_TO_LUMINANCE = Vector3(98242.786222f, 69954.398112f, 66475.012354f);  // idem
 
 
-        cb.gSkyViewProjMat = mViewProjMat;
+        mAtmosphereConstants.gSkyViewProjMat = mViewProjMat;
         {
-            cb.gSkyInvViewProjMat = mViewProjMat.Invert();
+            mAtmosphereConstants.gSkyInvViewProjMat = mViewProjMat.Invert();
         }
         {
-            cb.gSkyInvProjMat = mProjMat.Invert();
+            mAtmosphereConstants.gSkyInvProjMat = mProjMat.Invert();
         }
         {
-            cb.gSkyInvViewMat = mViewMat.Invert();
+            mAtmosphereConstants.gSkyInvViewMat = mViewMat.Invert();
         }
 
-        cb.gShadowmapViewProjMat = mShadowmapViewProjMat;
+        mAtmosphereConstants.gShadowmapViewProjMat = mShadowmapViewProjMat;
 
-        cb.camera = mCamPosFinal;
-        cb.view_ray = mViewDir;
-        cb.sun_direction = mSunDir;
-
-
-        if (AtmosphereConstantsCB)
-            AtmosphereConstantsCB->CopyData(0, cb);
+        mAtmosphereConstants.camera = mCamPosFinal;
+        mAtmosphereConstants.view_ray = mViewDir;
+        mAtmosphereConstants.sun_direction = mSunDir;
 
         viewRayMarchMaxSPP = viewRayMarchMinSPP >= viewRayMarchMaxSPP ? viewRayMarchMinSPP + 1 : viewRayMarchMaxSPP;
         mCommonConstanants.rayMarchMinMaxSPP[0] = float(viewRayMarchMinSPP);
         mCommonConstanants.rayMarchMinMaxSPP[1] = float(viewRayMarchMaxSPP);
         mCommonConstanants.terrainResolution = mTerrainResolution;
-
-        if (AtmosphereCommonConstantsCB)
-            AtmosphereCommonConstantsCB->CopyData(0, mCommonConstanants);
     }
 
     void SkyAtmosphereCrossResources::Initialize(const SkyAtmosphereResources& Resources, const std::shared_ptr<GDevice>& primeDevice, const std::shared_ptr<GDevice>& secondDevice)
     {
-        mRayMarchingResult = std::make_shared<GCrossAdapterResource>(Resources.GetRayMarchingResult().GetD3D12ResourceDesc(), primeDevice, secondDevice);
-        mTerrainRenderTarget = std::make_shared<GCrossAdapterResource>(Resources.GetTerrainRender().GetD3D12ResourceDesc(), primeDevice, secondDevice);
-        mDepthMap = std::make_shared<GCrossAdapterResource>(Resources.GetDepthMap().GetD3D12ResourceDesc(), primeDevice, secondDevice);
-        mTransmittanceLut = std::make_shared<GCrossAdapterResource>(Resources.GetTransmittanceLut().GetD3D12ResourceDesc(), primeDevice, secondDevice);
+        mTerrainRenderTarget = std::make_shared<GCrossAdapterResource>(Resources.GetTerrainRender().GetD3D12ResourceDesc(), primeDevice, secondDevice, 
+            L"Cross TerrainRenderTarget");
+		mDepthMap = std::make_shared<GCrossAdapterResource>(Resources.GetDepthMap().GetD3D12ResourceDesc(), primeDevice, secondDevice,
+			L"Cross DepthMap");
+
+		mRayMarchingResult = std::make_shared<GCrossAdapterResource>(Resources.GetRayMarchingResult().GetD3D12ResourceDesc(), primeDevice, secondDevice,
+			L"Cross RayMarchingResult");
+		mTransmittanceLut = std::make_shared<GCrossAdapterResource>(Resources.GetTransmittanceLut().GetD3D12ResourceDesc(), primeDevice, secondDevice,
+			L"Cross TransmittanceLut");
     }
 
     void SkyAtmosphereCrossResources::OnResize(uint32_t width, uint32_t height) const

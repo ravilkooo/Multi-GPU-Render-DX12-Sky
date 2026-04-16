@@ -33,7 +33,7 @@ HybridAtmosphereApp::~HybridAtmosphereApp() = default;
 void HybridAtmosphereApp::SwitchDevice()
 {
     Flush();
-    IsUsingSharedSSAO = !IsUsingSharedSSAO;
+    IsUsingSharedAtmosphere = !IsUsingSharedAtmosphere;
 }
 
 void HybridAtmosphereApp::ChangeAOMethod()
@@ -119,8 +119,6 @@ void HybridAtmosphereApp::UpdateAtmosphere()
 	auto& app = static_cast<Common::D3DApp&>(Common::D3DApp::GetApp());
 	auto keyboard = app.GetKeyboard();
 
-	// Vector3 camPos = camera->gameObject->GetTransform()->GetWorldPosition();
-
 	float atmosphereMoveSpeed = 1.0f;
 	float terrainMoveSpeed = 1.0f;
 	if (keyboard->KeyIsPressed(VK_SHIFT))
@@ -198,23 +196,28 @@ void HybridAtmosphereApp::UpdateAtmosphere()
         skyAtmosphere->mViewProjMat = skyAtmosphere->mViewMat * skyAtmosphere->mProjMat;
     }
 
-    float mSunIlluminanceScale = 1.0f;
+    float sunIlluminanceScale = 1.0f;
     int NumScatteringOrder = 4;
 
     skyAtmosphere->mCommonConstanants.viewProjMat = skyAtmosphere->mViewProjMat;
     skyAtmosphere->mCommonConstanants.color = { 0.0, 1.0, 1.0, 1.0 };
     skyAtmosphere->mCommonConstanants.gameResolution[0] = uint32_t(MainWindow->GetClientWidth());
     skyAtmosphere->mCommonConstanants.gameResolution[1] = uint32_t(MainWindow->GetClientHeight());
-    skyAtmosphere->mCommonConstanants.sunIlluminance = { 1.0f * mSunIlluminanceScale, 1.0f * mSunIlluminanceScale, 1.0f * mSunIlluminanceScale };
+    skyAtmosphere->mCommonConstanants.sunIlluminance = { 1.0f * sunIlluminanceScale, 1.0f * sunIlluminanceScale, 1.0f * sunIlluminanceScale };
     skyAtmosphere->mCommonConstanants.scatteringMaxPathDepth = NumScatteringOrder;
     skyAtmosphere->mCommonConstanants.frameTimeSec = timer.DeltaTime();
     skyAtmosphere->mCommonConstanants.timeSec = timer.TotalTime();
     skyAtmosphere->mCommonConstanants.frameId = gFrameId;
     skyAtmosphere->mCommonConstanants.screenshotCaptureActive = false;
     skyAtmosphere->mCommonConstanants.terrainPosDelta = skyAtmosphere->mTerrainPos;
-    skyAtmosphere->UpdateSkyAtmosphereBuffer(
-        currentFrameResource->PrimeAtmosphereCommonUploadBuffer,
-        currentFrameResource->PrimeAtmosphereUploadBuffer);
+
+    skyAtmosphere->UpdateSkyAtmosphereBuffer();
+
+	currentFrameResource->PrimeAtmosphereUploadBuffer->CopyData(0, skyAtmosphere->mAtmosphereConstants);
+	currentFrameResource->SecondAtmosphereUploadBuffer->CopyData(0, skyAtmosphere->mAtmosphereConstants);
+
+	currentFrameResource->PrimeAtmosphereCommonUploadBuffer->CopyData(0, skyAtmosphere->mCommonConstanants);
+    currentFrameResource->SecondAtmosphereCommonUploadBuffer->CopyData(0, skyAtmosphere->mCommonConstanants);
 }
 
 void HybridAtmosphereApp::PopulateAtmosphereCommands(const std::shared_ptr<GCommandList>& cmdList,
@@ -225,9 +228,48 @@ void HybridAtmosphereApp::PopulateAtmosphereCommands(const std::shared_ptr<GComm
 		currentFrameResource->PrimeAtmosphereCommonUploadBuffer,
 		currentFrameResource->PrimeAtmosphereUploadBuffer, Resources);
 
-    skyAtmosphere->ComputeAtmosphere(cmdList,
-		currentFrameResource->PrimeAtmosphereCommonUploadBuffer,
-		currentFrameResource->PrimeAtmosphereUploadBuffer, Resources);
+    if (IsUsingSharedAtmosphere)
+    {
+        {
+            const auto& Resources = skyAtmosphere->GetPrimeResources();
+			const auto& CrossResources = skyAtmosphere->GetCrossResources();
+
+            cmdList->CopyResource(CrossResources.GetTerrainRenderTarget().GetPrimeResource(), Resources.GetTerrainRender());
+            cmdList->CopyResource(CrossResources.GetDepthMap().GetPrimeResource(), Resources.GetDepthMap());
+
+			cmdList->CopyResource(Resources.GetRayMarchingResult(), CrossResources.GetRayMarchingResult().GetPrimeResource());
+			cmdList->CopyResource(Resources.GetTransmittanceLut(), CrossResources.GetTransmittanceLut().GetPrimeResource());
+
+        }
+        auto secondQueue = secondDevice->GetCommandQueue();
+
+        if (currentFrameResource->SecondRenderFenceValue == 0 || secondQueue->IsFinish(currentFrameResource->SecondRenderFenceValue))
+        {
+            const auto& SecondResources = skyAtmosphere->GetSecondResource();
+            const auto& SecondCrossResources = skyAtmosphere->GetCrossResources();
+            const auto secondCmdList = secondQueue->GetCommandList();
+
+			secondCmdList->CopyResource(SecondResources.GetTerrainRender(), SecondCrossResources.GetTerrainRenderTarget().GetSharedResource());
+			secondCmdList->CopyResource(SecondResources.GetDepthMap(), SecondCrossResources.GetDepthMap().GetSharedResource());
+            
+			skyAtmosphere->ComputeAtmosphere(secondCmdList,
+				currentFrameResource->SecondAtmosphereCommonUploadBuffer,
+				currentFrameResource->SecondAtmosphereUploadBuffer, SecondResources);
+
+			secondCmdList->CopyResource(SecondCrossResources.GetRayMarchingResult().GetSharedResource(), SecondResources.GetRayMarchingResult());
+			secondCmdList->CopyResource(SecondCrossResources.GetTransmittanceLut().GetSharedResource(), SecondResources.GetTransmittanceLut());
+
+            currentFrameResource->SecondRenderFenceValue = secondQueue->ExecuteCommandList(secondCmdList);
+        }
+
+    }
+    else
+    {
+		skyAtmosphere->ComputeAtmosphere(cmdList,
+			currentFrameResource->PrimeAtmosphereCommonUploadBuffer,
+			currentFrameResource->PrimeAtmosphereUploadBuffer, Resources);
+    }
+
 }
 
 void HybridAtmosphereApp::PopulateShadowMapCommands(const std::shared_ptr<GCommandList>& cmdList)
@@ -1619,7 +1661,7 @@ LRESULT HybridAtmosphereApp::MsgProc(const HWND hwnd, const UINT msg, const WPAR
 #if defined(DEBUG) || defined(_DEBUG)
             if (keycode == (VK_F1) && keyboard.KeyIsPressed(VK_F1))
             {
-                IsUsingSharedSSAO = !IsUsingSharedSSAO;
+                IsUsingSharedAtmosphere = !IsUsingSharedAtmosphere;
                 Flush();
             }
 

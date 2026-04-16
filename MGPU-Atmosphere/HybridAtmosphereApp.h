@@ -132,7 +132,7 @@ protected:
 
     bool IsStop = false;
 
-    bool IsUsingSharedSSAO = false;
+    bool IsUsingSharedAtmosphere = false;
     bool IsUseHBAO = false;
 
     UINT pathMapShow = 0;

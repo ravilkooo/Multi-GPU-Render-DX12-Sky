@@ -116,7 +116,11 @@ namespace Atmosphere
 
 		void OnResize(uint32_t width, uint32_t height) const;
 
+		const GCrossAdapterResource& GetTerrainRenderTarget() const { return *mTerrainRenderTarget; }
+		const GCrossAdapterResource& GetDepthMap() const { return *mDepthMap; }
+
 		const GCrossAdapterResource& GetRayMarchingResult() const { return *mRayMarchingResult; }
+		const GCrossAdapterResource& GetTransmittanceLut() const { return *mTransmittanceLut; }
 	};
 
     class SkyAtmosphereResources
@@ -274,6 +278,7 @@ namespace Atmosphere
 
 		Vector3 mTerrainPos = Vector3(-1.02f, -0.33f, -2.38f);
 
+        AtmosphereConstants mAtmosphereConstants;
         AtmosphereCommonConstants mCommonConstanants;
 
         SkyAtmosphere();
@@ -288,9 +293,7 @@ namespace Atmosphere
         const SkyAtmosphereResources& GetSecondResource() { return mSecondResources; }
 		const SkyAtmosphereCrossResources& GetCrossResources() { return mCrossResources; }
 
-		void UpdateSkyAtmosphereBuffer(
-            const std::shared_ptr<ConstantUploadBuffer<AtmosphereCommonConstants>>& AtmosphereCommonConstantsCB,
-			const std::shared_ptr<ConstantUploadBuffer<AtmosphereConstants>>& AtmosphereConstantsCB);
+		void UpdateSkyAtmosphereBuffer();
 
 		void ComputeAtmosphere(const std::shared_ptr<GCommandList>& cmdList,
 			const std::shared_ptr<ConstantUploadBuffer<AtmosphereCommonConstants>>& AtmosphereCommonConstantsCB,
