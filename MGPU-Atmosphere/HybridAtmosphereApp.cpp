@@ -201,8 +201,6 @@ void HybridAtmosphereApp::UpdateAtmosphere()
 
     skyAtmosphere->mCommonConstanants.viewProjMat = skyAtmosphere->mViewProjMat;
     skyAtmosphere->mCommonConstanants.color = { 0.0, 1.0, 1.0, 1.0 };
-    skyAtmosphere->mCommonConstanants.gameResolution[0] = uint32_t(MainWindow->GetClientWidth());
-    skyAtmosphere->mCommonConstanants.gameResolution[1] = uint32_t(MainWindow->GetClientHeight());
     skyAtmosphere->mCommonConstanants.sunIlluminance = { 1.0f * sunIlluminanceScale, 1.0f * sunIlluminanceScale, 1.0f * sunIlluminanceScale };
     skyAtmosphere->mCommonConstanants.scatteringMaxPathDepth = NumScatteringOrder;
     skyAtmosphere->mCommonConstanants.frameTimeSec = timer.DeltaTime();
@@ -643,25 +641,6 @@ bool HybridAtmosphereApp::Initialize()
         Flush();
         SwitchDevice();
     };
-
-    /*
-    auto& NativeHBAOState = benchmark.AddState<WaitState>(TestTime, FileQueueWriter(Benchmark::GetLogFile(L"Native Atmosphere Terrain ", *primeDevice, *secondDevice)));
-    NativeHBAOState.OnEnter = [this](FileQueueWriter& logs)
-    {
-        ResetCamera();
-        logs.PushMessage(L"FPS;MSPF;MinFPS;MinMSPF;MaxFPS;MaxMSPF");
-    };
-    NativeHBAOState.OnStatChanged = [this](FileQueueWriter& logs, const TimeStats& ts, float progress)
-    {
-        Benchmark::PrintStatsCSV(ts, logs);
-        MainWindow->SetWindowTitle(L"Native Atmosphere Terrain Progress " + std::format(L"{:.2f}", progress * 100) + L"% FPS:" + std::to_wstring(ts.fps));
-    };
-    NativeHBAOState.OnExit = [this](FileQueueWriter& logs)
-    {
-        logs.WriteAllLog();
-        Flush();
-    };
-    */
 
     auto& HybridAtmosphereTerrainState = benchmark.AddState<WaitState>(TestTime, FileQueueWriter(Benchmark::GetLogFile(L"Hybrid Atmosphere Terrain ", *primeDevice, *secondDevice)));
     HybridAtmosphereTerrainState.OnEnter = [this](FileQueueWriter& logs)
@@ -1577,6 +1556,11 @@ void HybridAtmosphereApp::OnResize()
     if (antiAliasingPrimePath != nullptr)
     {
         antiAliasingPrimePath->OnResize(MainWindow->GetClientWidth(), MainWindow->GetClientHeight());
+    }
+
+    if (skyAtmosphere != nullptr)
+    {
+        skyAtmosphere->OnResize(MainWindow->GetClientWidth(), MainWindow->GetClientHeight());
     }
 
     UIPath->CreateDeviceObject();

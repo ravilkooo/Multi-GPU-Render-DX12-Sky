@@ -447,7 +447,7 @@ float3 GetSunLuminance(float3 WorldPos, float3 WorldDir, float PlanetRadius)
 float3 GetMultipleScattering(AtmosphereParameters Atmosphere, float3 scattering, float3 extinction, float3 worlPos, float viewZenithCosAngle)
 {
     float2 uv = saturate(float2(viewZenithCosAngle * 0.5f + 0.5f, (length(worlPos) - Atmosphere.BottomRadius) / (Atmosphere.TopRadius - Atmosphere.BottomRadius)));
-    uv = float2(fromUnitToSubUvs(uv.x, MultiScatteringLUTRes), fromUnitToSubUvs(uv.y, MultiScatteringLUTRes));
+    uv = float2(fromUnitToSubUvs(uv.x, gMultiScatLutResolution[0]), fromUnitToSubUvs(uv.y, gMultiScatLutResolution[1]));
 
     float3 multiScatteredLuminance = MultiScatTexture.SampleLevel(samplerLinearClamp, uv, 0).rgb;
     return multiScatteredLuminance;

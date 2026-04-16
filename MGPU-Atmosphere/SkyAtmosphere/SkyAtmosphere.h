@@ -61,34 +61,6 @@ namespace Atmosphere
         float mu_s_min; // cosine of max Sun zenith angle to precompute
     };
 
-    struct LookUpTablesInfo
-    {
-        unsigned int TRANSMITTANCE_TEXTURE_WIDTH = 256;
-        unsigned int TRANSMITTANCE_TEXTURE_HEIGHT = 64;
-
-        unsigned int SCATTERING_TEXTURE_R_SIZE = 32;
-        unsigned int SCATTERING_TEXTURE_MU_SIZE = 128;
-        unsigned int SCATTERING_TEXTURE_MU_S_SIZE = 32;
-        unsigned int SCATTERING_TEXTURE_NU_SIZE = 8;
-
-        unsigned int IRRADIANCE_TEXTURE_WIDTH = 64;
-        unsigned int IRRADIANCE_TEXTURE_HEIGHT = 16;
-
-        // Derived from above
-        unsigned int SCATTERING_TEXTURE_WIDTH = 0xDEADBEEF;
-        unsigned int SCATTERING_TEXTURE_HEIGHT = 0xDEADBEEF;
-        unsigned int SCATTERING_TEXTURE_DEPTH = 0xDEADBEEF;
-
-        void updateDerivedData()
-        {
-            SCATTERING_TEXTURE_WIDTH = SCATTERING_TEXTURE_NU_SIZE * SCATTERING_TEXTURE_MU_S_SIZE;
-            SCATTERING_TEXTURE_HEIGHT = SCATTERING_TEXTURE_MU_SIZE;
-            SCATTERING_TEXTURE_DEPTH = SCATTERING_TEXTURE_R_SIZE;
-        }
-
-        LookUpTablesInfo() { updateDerivedData(); }
-    };
-
 	enum class CBSlots : UINT {
 		Common = 0u, Atmosphere, Count
 	};
@@ -100,6 +72,70 @@ namespace Atmosphere
 	enum class UavSlots : UINT {
 		Transmittance = 0u, Multiscat, SkyView, Aerial, RayMarching, Count
 	};
+
+    class TextureResolutions
+    {
+    public:
+        enum class Type : UINT {
+            Transmittance = 0u, Multiscat, SkyView, Aerial, RayMarching, TerrainRender
+        };
+
+        static std::pair<uint32_t, uint32_t> GetResolutionBasedOnScreenResolution(uint32_t screenWidth, uint32_t screenHeight, Type textureType)
+        {
+            switch (textureType)
+            {
+            case Atmosphere::TextureResolutions::Type::Transmittance:
+            {
+                return std::make_pair<uint32_t, uint32_t>(256, 64);
+            }
+                break;
+            case Atmosphere::TextureResolutions::Type::Multiscat:
+            {
+                return std::make_pair<uint32_t, uint32_t>(32, 32);
+            }
+                break;
+            case Atmosphere::TextureResolutions::Type::SkyView:
+            {
+                uint32_t width;
+                if (screenWidth <= 1280) width = 200;
+                else if (screenWidth <= 1920) width = 256;
+                else if (screenWidth <= 2560) width = 320;
+                else if (screenWidth <= 3840) width = 400;
+                else width = 512;
+
+				uint32_t height;
+				if (screenHeight <= 1280) height = 100;
+				else if (screenHeight <= 1920) height = 128;
+				else if (screenHeight <= 2560) height = 160;
+				else if (screenHeight <= 3840) height = 200;
+				else height = 256;
+
+                return std::make_pair(width, height);
+            }
+                break;
+            case Atmosphere::TextureResolutions::Type::Aerial:
+			{
+				uint32_t width;
+				if (screenWidth <= 1920) width = 32;
+				else if (screenWidth <= 2560) width = 48;
+				else if (screenWidth <= 3840) width = 64;
+				else width = 96;
+
+				return std::make_pair(width, width);
+			}
+                break;
+            case Atmosphere::TextureResolutions::Type::TerrainRender:
+                return std::make_pair(screenWidth, screenHeight);
+				break;
+			case Atmosphere::TextureResolutions::Type::RayMarching:
+				return std::make_pair(screenWidth, screenHeight);
+				break;
+			default:
+				return std::make_pair(screenWidth, screenHeight);
+                break;
+            }
+        }
+    };
 
 	class SkyAtmosphereCrossResources
 	{
@@ -188,19 +224,21 @@ namespace Atmosphere
 		void LoadShaders();
 		void InitPSOs();
 
-		void LoadResources();
-		void LoadTerrainResource();
-		void LoadTransmittanceLutResource();
-		void LoadMultiScatLutResource();
-		void LoadSkyViewLutResource();
-		void LoadAerialPerpspectiveLutResource();
-		void LoadRayMarchingResource();
+		void TerrainResourceResize(UINT width, UINT height);
+		void TransmittanceLutResourceResize(UINT width, UINT height);
+		void MultiScatLutResourceResize(UINT width, UINT height);
+		void SkyViewLutResourceResize(UINT width, UINT height);
+		void AerialPerpspectiveLutResourceResize(UINT width, UINT height);
+		void RayMarchingResourceResize(UINT width, UINT height);
+        void RebuildDescriptors();
 
 	public:
 
         SkyAtmosphereResources();
         void Initialize(const std::shared_ptr<GDevice>& device,
 			UINT screenWidth = 1920, UINT screenHeight = 1080, uint32_t terrainResolution = 512u);
+
+        void OnResize(UINT screenWidth, UINT screenHeight);
 
 		const GRootSignature& GetRootSignature() const { return *mRootSignature.get(); }
 		const GraphicPSO& GetTerrainPSO() const { return *mTerrainPSO.get(); }
@@ -247,7 +285,6 @@ namespace Atmosphere
 	class SkyAtmosphere
 	{
 		AtmosphereInfo mAtmosphereInfos;
-		LookUpTablesInfo mLutInfos;
 
         /*
         * Prime/second resources

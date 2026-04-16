@@ -31,16 +31,6 @@ struct alignas(16) AtmosphereConstants
 	float mie_density[12];
 	float absorption_density[12];
 
-	// int TRANSMITTANCE_TEXTURE_WIDTH;
-	// int TRANSMITTANCE_TEXTURE_HEIGHT;
-	// int IRRADIANCE_TEXTURE_WIDTH;
-	// int IRRADIANCE_TEXTURE_HEIGHT;
-
-	// int SCATTERING_TEXTURE_R_SIZE;
-	// int SCATTERING_TEXTURE_MU_SIZE;
-	// int SCATTERING_TEXTURE_MU_S_SIZE;
-	// int SCATTERING_TEXTURE_NU_SIZE;
-
 	DirectX::XMFLOAT3 SKY_SPECTRAL_RADIANCE_TO_LUMINANCE;
 	float pad3;
 	DirectX::XMFLOAT3 SUN_SPECTRAL_RADIANCE_TO_LUMINANCE;
@@ -60,7 +50,7 @@ struct alignas(16) AtmosphereConstants
 	float pad7;
 
 	float MultipleScatteringFactor;
-	float MultiScatteringLUTRes;
+	float pad8;
 	float pad9;
 	float pad10;
 };

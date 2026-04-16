@@ -37,20 +37,6 @@ cbuffer SKYATMOSPHERE_BUFFER : register(b1)
 	float4 mie_density[3];
 	float4 absorption_density[3];
 
-	//
-	// Add generated static header constant
-	//
-
-	// int TRANSMITTANCE_TEXTURE_WIDTH;
-	// int TRANSMITTANCE_TEXTURE_HEIGHT;
-	// int IRRADIANCE_TEXTURE_WIDTH;
-	// int IRRADIANCE_TEXTURE_HEIGHT;
-
-	// int SCATTERING_TEXTURE_R_SIZE;
-	// int SCATTERING_TEXTURE_MU_SIZE;
-	// int SCATTERING_TEXTURE_MU_S_SIZE;
-	// int SCATTERING_TEXTURE_NU_SIZE;
-
 	float3 SKY_SPECTRAL_RADIANCE_TO_LUMINANCE;
 	float  pad3;
 	float3 SUN_SPECTRAL_RADIANCE_TO_LUMINANCE;
@@ -73,7 +59,7 @@ cbuffer SKYATMOSPHERE_BUFFER : register(b1)
 	float  pad7;
 
 	float MultipleScatteringFactor;
-	float MultiScatteringLUTRes;
+	float pad8;
 	float pad9;
 	float pad10;
 };

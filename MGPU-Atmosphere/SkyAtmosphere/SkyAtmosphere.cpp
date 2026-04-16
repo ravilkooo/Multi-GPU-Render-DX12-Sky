@@ -24,12 +24,48 @@ namespace Atmosphere
         mSecondResources.Initialize(secondDevice, screenWidth, screenHeight, terrainResolution);
 
         mCrossResources.Initialize(mPrimeResources, primeDevice, secondDevice);
+
+        OnResize(screenWidth, screenHeight);
     }
 
     void SkyAtmosphere::OnResize(const UINT newScreenWidth, const UINT newScreenHeight)
-    {
+	{
+        mScreenWidth = newScreenWidth;
+        mScreenHeight = newScreenHeight;
+
+		mCommonConstanants.gameResolution[0] = newScreenWidth;
+		mCommonConstanants.gameResolution[1] = newScreenHeight;
+
+        auto transmRes = TextureResolutions::GetResolutionBasedOnScreenResolution(
+            newScreenWidth, newScreenHeight, TextureResolutions::Type::Transmittance);
+        mCommonConstanants.transmittanceLutResolution[0] = transmRes.first;
+        mCommonConstanants.transmittanceLutResolution[1] = transmRes.second;
+
+        auto multiScatRes = TextureResolutions::GetResolutionBasedOnScreenResolution(
+            newScreenWidth, newScreenHeight, TextureResolutions::Type::Multiscat);
+        mCommonConstanants.multiScatLutResolution[0] = multiScatRes.first;
+        mCommonConstanants.multiScatLutResolution[1] = multiScatRes.second;
+
+        auto skyViewRes = TextureResolutions::GetResolutionBasedOnScreenResolution(
+            newScreenWidth, newScreenHeight, TextureResolutions::Type::SkyView);
+        mCommonConstanants.skyViewLutResolution[0] = skyViewRes.first;
+        mCommonConstanants.skyViewLutResolution[1] = skyViewRes.second;
+
+        auto aerialRes = TextureResolutions::GetResolutionBasedOnScreenResolution(
+            newScreenWidth, newScreenHeight, TextureResolutions::Type::Aerial);
+        mCommonConstanants.aerialPerpspectiveLutResolution[0] = aerialRes.first;
+        mCommonConstanants.aerialPerpspectiveLutResolution[1] = aerialRes.second;
+        mCommonConstanants.aerialPerpspectiveLutResolution[2] = 32;
+
+        auto rayMarchRes = TextureResolutions::GetResolutionBasedOnScreenResolution(
+            newScreenWidth, newScreenHeight, TextureResolutions::Type::RayMarching);
+		mCommonConstanants.rayMarchingResolution[0] = rayMarchRes.first;
+		mCommonConstanants.rayMarchingResolution[1] = rayMarchRes.second;
 
 
+        mPrimeResources.OnResize(newScreenWidth, newScreenHeight);
+        mSecondResources.OnResize(newScreenWidth, newScreenHeight);
+        mCrossResources.OnResize(newScreenWidth, newScreenHeight);
     }
 
     void SkyAtmosphere::InitAtmosphereData()
@@ -332,23 +368,13 @@ namespace Atmosphere
         mComputeRaymarchPSO->Initialize(mDevice);
     }
 
-    void SkyAtmosphereResources::LoadResources()
-    {
-        LoadTerrainResource();
-        LoadTransmittanceLutResource();
-        LoadMultiScatLutResource();
-        LoadSkyViewLutResource();
-        LoadAerialPerpspectiveLutResource();
-        LoadRayMarchingResource();
-    }
-
-    void SkyAtmosphereResources::LoadTerrainResource()
+    void SkyAtmosphereResources::TerrainResourceResize(UINT width, UINT height)
     {
 	    D3D12_RESOURCE_DESC renderTargetDesc;
 	    renderTargetDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
 	    renderTargetDesc.Alignment = 0;
-	    renderTargetDesc.Width = mScreenWidth;
-	    renderTargetDesc.Height = mScreenHeight;
+	    renderTargetDesc.Width = width;
+	    renderTargetDesc.Height = height;
 	    renderTargetDesc.DepthOrArraySize = 1;
 	    renderTargetDesc.MipLevels = 1;
 	    renderTargetDesc.Format = BackBufferFormat;
@@ -357,31 +383,18 @@ namespace Atmosphere
 	    renderTargetDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
         renderTargetDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET | D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
 
-	    D3D12_CLEAR_VALUE optClear;
-	    optClear = CD3DX12_CLEAR_VALUE(BackBufferFormat, DirectX::Colors::Black);
+        if (mTerrainRenderTarget.get() == nullptr || mTerrainRenderTarget->GetD3D12Resource() == nullptr)
+        {
+			D3D12_CLEAR_VALUE optClear;
+			optClear = CD3DX12_CLEAR_VALUE(BackBufferFormat, DirectX::Colors::Black);
 
-        mTerrainRenderTarget = std::make_shared<GTexture>(mDevice, renderTargetDesc,
-            L"Terrain RTV", TextureUsage::RenderTarget, &optClear);
-
-        mTerrainRenderTargetRTV = mDevice->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, 1);
-        mTerrainRenderTargetSRV = mDevice->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 1);
-
-	    D3D12_RENDER_TARGET_VIEW_DESC rtvDesc = {};
-	    rtvDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
-	    rtvDesc.Format = BackBufferFormat;
-	    rtvDesc.Texture2D.MipSlice = 0;
-	    rtvDesc.Texture2D.PlaneSlice = 0;
-        mTerrainRenderTarget->CreateRenderTargetView(&rtvDesc, &mTerrainRenderTargetRTV);
-
-	    D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-	    srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-	    srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-	    srvDesc.Format = BackBufferFormat;
-	    srvDesc.Texture2D.MostDetailedMip = 0;
-	    srvDesc.Texture2D.MipLevels = 1;
-        mTerrainRenderTarget->CreateShaderResourceView(&srvDesc, &mTerrainRenderTargetSRV);
-
-
+			mTerrainRenderTarget = std::make_shared<GTexture>(mDevice, renderTargetDesc,
+				L"Terrain RTV", TextureUsage::RenderTarget, &optClear);
+        }
+        else
+        {
+            GTexture::Resize(*mTerrainRenderTarget.get(), width, height, 1);
+        }
 
 	    D3D12_RESOURCE_DESC texDesc;
 	    ZeroMemory(&texDesc, sizeof(D3D12_RESOURCE_DESC));
@@ -397,50 +410,20 @@ namespace Atmosphere
 	    texDesc.Format = DXGI_FORMAT_R32_TYPELESS;
 	    texDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
 
-	    optClear.Format = DXGI_FORMAT_D32_FLOAT;
-	    optClear.DepthStencil.Depth = 1.0f;
+        if (mDepthMap.get() == nullptr || mDepthMap->GetD3D12Resource() == nullptr)
+		{
+			D3D12_CLEAR_VALUE optClear;
+            optClear.Format = DXGI_FORMAT_D32_FLOAT;
+            optClear.DepthStencil.Depth = 1.0f;
 
-        mDepthMap = std::make_shared<GTexture>(mDevice, texDesc,
-		    L"Terrain Depth Map " + mDevice->GetName(),
-		    TextureUsage::Depth, &optClear);
-
-	    mDepthMapSRV = mDevice->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 1);
-	    mDepthMapDSV = mDevice->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_DSV, 1);
-
-	    D3D12_DEPTH_STENCIL_VIEW_DESC dsvDesc;
-	    dsvDesc.Flags = D3D12_DSV_FLAG_NONE;
-	    dsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
-	    dsvDesc.Format = DXGI_FORMAT_D32_FLOAT;
-	    dsvDesc.Texture2D.MipSlice = 0;
-	    mDepthMap->CreateDepthStencilView(&dsvDesc, &mDepthMapDSV);
-
-	    srvDesc = {};
-	    srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-	    srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-	    srvDesc.Texture2D.MostDetailedMip = 0;
-	    srvDesc.Texture2D.MipLevels = 1;
-	    srvDesc.Format = DXGI_FORMAT_R32_FLOAT;
-	    mDepthMap->CreateShaderResourceView(&srvDesc, &mDepthMapSRV);
-
-	    // Height Map
-	    auto queue = mDevice->GetCommandQueue(GQueueType::Compute);
-	    const auto cmdList = queue->GetCommandList();
-	    mHeightMapTex = GTexture::LoadTextureFromFile(L"Data\\Textures\\heightmap.dds", cmdList);
-	    mHeightMapTex->SetName(L"heightMapTex");
-	    queue->WaitForFenceValue(queue->ExecuteCommandList(cmdList));
-	    mDevice->Flush();
-
-	    mHeightMapTexSRV = mDevice->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 1);
-
-	    srvDesc = {};
-	    srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-
-	    auto desc = mHeightMapTex->GetD3D12Resource()->GetDesc();
-	    srvDesc.Format = GetSRGBFormat(desc.Format);
-	    srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-	    srvDesc.Texture2D.MipLevels = desc.MipLevels;
-	    srvDesc.Texture2D.MostDetailedMip = 0;
-	    mHeightMapTex->CreateShaderResourceView(&srvDesc, &mHeightMapTexSRV);
+            mDepthMap = std::make_shared<GTexture>(mDevice, texDesc,
+                L"Terrain Depth Map " + mDevice->GetName(),
+                TextureUsage::Depth, &optClear);
+        }
+        else
+        {
+            GTexture::Resize(*mDepthMap.get(), width, height, 1);
+        }
 
 	    // Terrain
 
@@ -454,8 +437,8 @@ namespace Atmosphere
 	    mTerrainScissorRect = { 0, 0, (int) mScreenWidth, (int) mScreenHeight };
     }
 
-    void SkyAtmosphereResources::LoadTransmittanceLutResource()
-    {
+    void SkyAtmosphereResources::TransmittanceLutResourceResize(UINT width, UINT height)
+{
         // Create simple transmittance LUT (2D) as a starting point. Sizes chosen to match UE sample sizes.
         D3D12_RESOURCE_DESC transDesc = {};
         ZeroMemory(&transDesc, sizeof(D3D12_RESOURCE_DESC));
@@ -467,35 +450,24 @@ namespace Atmosphere
         transDesc.SampleDesc.Quality = 0;
         transDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
         transDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
-        transDesc.Width = 256; // TRANSMITTANCE_TEXTURE_WIDTH
-        transDesc.Height = 64; // TRANSMITTANCE_TEXTURE_HEIGHT
+        transDesc.Width = width; // TRANSMITTANCE_TEXTURE_WIDTH
+        transDesc.Height = height; // TRANSMITTANCE_TEXTURE_HEIGHT
         transDesc.Format = DXGI_FORMAT_R32G32B32A32_FLOAT; // transmittance LUT format
 
-        mTransmittanceLut = std::make_shared<GTexture>(mDevice, transDesc,
-            L"TransmittanceLut " + mDevice->GetName(), TextureUsage::Normalmap);
+        if (mTransmittanceLut.get() == nullptr || mTransmittanceLut->GetD3D12Resource() == nullptr)
+        {
+            mTransmittanceLut = std::make_shared<GTexture>(mDevice, transDesc,
+                L"TransmittanceLut " + mDevice->GetName(), TextureUsage::Normalmap);
+		}
+		else
+		{
+			GTexture::Resize(*mTransmittanceLut.get(), width, height, 1);
+		}
 
-        mTransmittanceLutUAV = mDevice->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 1);
-        mTransmittanceLutSRV = mDevice->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 1);
-
-        D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc;
-        uavDesc.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;  // transmittance LUT format
-        uavDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
-        uavDesc.Texture2D.PlaneSlice = 0;
-        uavDesc.Texture2D.MipSlice = 0;
-        mTransmittanceLut->CreateUnorderedAccessView(&uavDesc, &mTransmittanceLutUAV);
-
-        D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc;
-        srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-        srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-        srvDesc.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;  // transmittance LUT format
-        srvDesc.Texture2D.MostDetailedMip = 0;
-        srvDesc.Texture2D.MipLevels = 1;
-        srvDesc.Texture2D.PlaneSlice = 0;
-        mTransmittanceLut->CreateShaderResourceView(&srvDesc, &mTransmittanceLutSRV);
     }
 
-    void SkyAtmosphereResources::LoadMultiScatLutResource()
-    {
+    void SkyAtmosphereResources::MultiScatLutResourceResize(UINT width, UINT height)
+{
         const UINT MultiScatteringLUTRes = 32;
 
         // Create simple MultiScat LUT (2D) as a starting point. Sizes chosen to match UE sample sizes.
@@ -509,35 +481,23 @@ namespace Atmosphere
         multiscatDesc.SampleDesc.Quality = 0;
         multiscatDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
         multiscatDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
-        multiscatDesc.Width = MultiScatteringLUTRes;
-        multiscatDesc.Height = MultiScatteringLUTRes;
+        multiscatDesc.Width = width;
+        multiscatDesc.Height = height;
         multiscatDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT; // MultiScat LUT format
 
-        mMultiScatLut = std::make_shared<GTexture>(mDevice, multiscatDesc,
-            L"MultiScatLut " + mDevice->GetName(), TextureUsage::Normalmap);
-
-        mMultiScatLutUAV = mDevice->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 1);
-        mMultiScatLutSRV = mDevice->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 1);
-
-        D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc;
-        uavDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;  // MultiScat LUT format
-        uavDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
-        uavDesc.Texture2D.PlaneSlice = 0;
-        uavDesc.Texture2D.MipSlice = 0;
-        mMultiScatLut->CreateUnorderedAccessView(&uavDesc, &mMultiScatLutUAV);
-
-        D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc;
-        srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-        srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-        srvDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;  // MultiScat LUT format
-        srvDesc.Texture2D.MostDetailedMip = 0;
-        srvDesc.Texture2D.MipLevels = 1;
-        srvDesc.Texture2D.PlaneSlice = 0;
-        mMultiScatLut->CreateShaderResourceView(&srvDesc, &mMultiScatLutSRV);
+		if (mMultiScatLut.get() == nullptr || mMultiScatLut->GetD3D12Resource() == nullptr)
+        {
+            mMultiScatLut = std::make_shared<GTexture>(mDevice, multiscatDesc,
+                L"MultiScatLut " + mDevice->GetName(), TextureUsage::Normalmap);
+        }
+        else
+        {
+            GTexture::Resize(*mMultiScatLut.get(), width, height, 1);
+		}
     }
 
-    void SkyAtmosphereResources::LoadSkyViewLutResource()
-    {
+    void SkyAtmosphereResources::SkyViewLutResourceResize(UINT width, UINT height)
+{
         // Create simple SkyView LUT (2D) as a starting point. Sizes chosen to match UE sample sizes.
         D3D12_RESOURCE_DESC skyviewDesc = {};
         ZeroMemory(&skyviewDesc, sizeof(D3D12_RESOURCE_DESC));
@@ -549,44 +509,31 @@ namespace Atmosphere
         skyviewDesc.SampleDesc.Quality = 0;
         skyviewDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
         skyviewDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
-        skyviewDesc.Width = 192; // SKYVIEW_TEXTURE_WIDTH
-        skyviewDesc.Height = 108; // SKYVIEW_TEXTURE_HEIGHT
+        skyviewDesc.Width = width; // SKYVIEW_TEXTURE_WIDTH
+        skyviewDesc.Height = height; // SKYVIEW_TEXTURE_HEIGHT
         skyviewDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT; // SkyView LUT format
 
-        mSkyViewLut = std::make_shared<GTexture>(mDevice, skyviewDesc,
-            L"SkyViewLut " + mDevice->GetName(), TextureUsage::Normalmap);
-
-        mSkyViewLutUAV = mDevice->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 1);
-        mSkyViewLutSRV = mDevice->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 1);
-
-        D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc;
-        uavDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;  // SkyView LUT format
-        uavDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
-        uavDesc.Texture2D.PlaneSlice = 0;
-        uavDesc.Texture2D.MipSlice = 0;
-        mSkyViewLut->CreateUnorderedAccessView(&uavDesc, &mSkyViewLutUAV);
-
-        D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc;
-        srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-        srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-        srvDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;  // SkyView LUT format
-        srvDesc.Texture2D.MostDetailedMip = 0;
-        srvDesc.Texture2D.MipLevels = 1;
-        srvDesc.Texture2D.PlaneSlice = 0;
-        mSkyViewLut->CreateShaderResourceView(&srvDesc, &mSkyViewLutSRV);
+		if (mSkyViewLut.get() == nullptr || mSkyViewLut->GetD3D12Resource() == nullptr)
+        {
+            mSkyViewLut = std::make_shared<GTexture>(mDevice, skyviewDesc,
+                L"SkyViewLut " + mDevice->GetName(), TextureUsage::Normalmap);
+        }
+        else
+        {
+            GTexture::Resize(*mSkyViewLut.get(), width, height, 1);
+		}
     }
 
-    void SkyAtmosphereResources::LoadAerialPerpspectiveLutResource()
+    void SkyAtmosphereResources::AerialPerpspectiveLutResourceResize(UINT width, UINT height)
     {
-        const UINT volumeRes = 32; // 32x32x32
 
         // Create simple Aerial Persp LUT (2D) as a starting point. Sizes chosen to match UE sample sizes.
         D3D12_RESOURCE_DESC aerialPerspDesc = {};
         ZeroMemory(&aerialPerspDesc, sizeof(D3D12_RESOURCE_DESC));
         aerialPerspDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE3D;
-        aerialPerspDesc.Width = volumeRes;
-        aerialPerspDesc.Height = volumeRes;
-        aerialPerspDesc.DepthOrArraySize = static_cast<UINT16>(volumeRes);
+        aerialPerspDesc.Width = width;
+        aerialPerspDesc.Height = height;
+        aerialPerspDesc.DepthOrArraySize = static_cast<UINT16>(32);
         aerialPerspDesc.Alignment = 0;
         aerialPerspDesc.MipLevels = 1;
         aerialPerspDesc.SampleDesc.Count = 1;
@@ -595,30 +542,18 @@ namespace Atmosphere
         aerialPerspDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
         aerialPerspDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT; // Aerial Persp LUT format
 
-        mAerialPerpspectiveLut = std::make_shared<GTexture>(mDevice, aerialPerspDesc,
-            L"AerialPerspLut " + mDevice->GetName(), TextureUsage::Normalmap);
-
-        mAerialPerpspectiveLutUAV = mDevice->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 1);
-        mAerialPerpspectiveLutSRV = mDevice->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 1);
-
-        D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc;
-        uavDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;  // Aerial Persp LUT format
-        uavDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE3D;
-        uavDesc.Texture3D.FirstWSlice = 0;
-        uavDesc.Texture3D.MipSlice = 0;
-        uavDesc.Texture3D.WSize = volumeRes;
-        mAerialPerpspectiveLut->CreateUnorderedAccessView(&uavDesc, &mAerialPerpspectiveLutUAV);
-
-        D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc;
-        srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-        srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE3D;
-        srvDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;  // Aerial Persp LUT format
-        srvDesc.Texture3D.MostDetailedMip = 0;
-        srvDesc.Texture3D.MipLevels = 1;
-        mAerialPerpspectiveLut->CreateShaderResourceView(&srvDesc, &mAerialPerpspectiveLutSRV);
+		if (mAerialPerpspectiveLut.get() == nullptr || mAerialPerpspectiveLut->GetD3D12Resource() == nullptr)
+        {
+            mAerialPerpspectiveLut = std::make_shared<GTexture>(mDevice, aerialPerspDesc,
+                L"AerialPerspLut " + mDevice->GetName(), TextureUsage::Normalmap);
+        }
+        else
+        {
+            GTexture::Resize(*mAerialPerpspectiveLut.get(), width, height, 32);
+		}
     }
 
-    void SkyAtmosphereResources::LoadRayMarchingResource()
+    void SkyAtmosphereResources::RayMarchingResourceResize(UINT width, UINT height)
     {
         // Create simple RayMarching (2D) as a starting point. Sizes chosen to match UE sample sizes.
         D3D12_RESOURCE_DESC raymarchDesc = {};
@@ -631,34 +566,135 @@ namespace Atmosphere
         raymarchDesc.SampleDesc.Quality = 0;
         raymarchDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
         raymarchDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
-        raymarchDesc.Width = 1920;
-        raymarchDesc.Height = 1080;
+        raymarchDesc.Width = width;
+        raymarchDesc.Height = height;
         raymarchDesc.Format = DXGI_FORMAT_R32G32B32A32_FLOAT; // RayMarching format
 
-        mRayMarchingResult = std::make_shared<GTexture>(mDevice, raymarchDesc,
-            L"RayMarching " + mDevice->GetName(), TextureUsage::Normalmap);
 
-        mRayMarchingResultUAV = mDevice->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 1);
-        mRayMarchingResultSRV = mDevice->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 1);
-
-        D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc;
-        uavDesc.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;  // RayMarching format
-        uavDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
-        uavDesc.Texture2D.PlaneSlice = 0;
-        uavDesc.Texture2D.MipSlice = 0;
-        mRayMarchingResult->CreateUnorderedAccessView(&uavDesc, &mRayMarchingResultUAV);
-
-        D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc;
-        srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-        srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-        srvDesc.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;  // RayMarching format
-        srvDesc.Texture2D.MostDetailedMip = 0;
-        srvDesc.Texture2D.MipLevels = 1;
-        srvDesc.Texture2D.PlaneSlice = 0;
-        mRayMarchingResult->CreateShaderResourceView(&srvDesc, &mRayMarchingResultSRV);
+		if (mRayMarchingResult.get() == nullptr || mRayMarchingResult->GetD3D12Resource() == nullptr)
+        {
+            mRayMarchingResult = std::make_shared<GTexture>(mDevice, raymarchDesc,
+                L"RayMarching " + mDevice->GetName(), TextureUsage::Normalmap);
+        }
+        else
+        {
+            GTexture::Resize(*mRayMarchingResult.get(), width, height, 1);
+		}
     }
 
-    void SkyAtmosphere::ComputeAtmosphere(const std::shared_ptr<GCommandList>& cmdList,
+	void SkyAtmosphereResources::RebuildDescriptors()
+	{
+		D3D12_RENDER_TARGET_VIEW_DESC rtvDesc = {};
+		rtvDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
+		rtvDesc.Format = BackBufferFormat;
+		rtvDesc.Texture2D.MipSlice = 0;
+		rtvDesc.Texture2D.PlaneSlice = 0;
+		mTerrainRenderTarget->CreateRenderTargetView(&rtvDesc, &mTerrainRenderTargetRTV);
+
+		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+		srvDesc.Format = BackBufferFormat;
+		srvDesc.Texture2D.MostDetailedMip = 0;
+		srvDesc.Texture2D.MipLevels = 1;
+		mTerrainRenderTarget->CreateShaderResourceView(&srvDesc, &mTerrainRenderTargetSRV);
+
+		D3D12_DEPTH_STENCIL_VIEW_DESC dsvDesc;
+		dsvDesc.Flags = D3D12_DSV_FLAG_NONE;
+		dsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
+		dsvDesc.Format = DXGI_FORMAT_D32_FLOAT;
+		dsvDesc.Texture2D.MipSlice = 0;
+		mDepthMap->CreateDepthStencilView(&dsvDesc, &mDepthMapDSV);
+
+		srvDesc = {};
+		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+		srvDesc.Texture2D.MostDetailedMip = 0;
+		srvDesc.Texture2D.MipLevels = 1;
+		srvDesc.Format = DXGI_FORMAT_R32_FLOAT;
+		mDepthMap->CreateShaderResourceView(&srvDesc, &mDepthMapSRV);
+		D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc;
+		uavDesc.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;  // transmittance LUT format
+		uavDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
+		uavDesc.Texture2D.PlaneSlice = 0;
+		uavDesc.Texture2D.MipSlice = 0;
+		mTransmittanceLut->CreateUnorderedAccessView(&uavDesc, &mTransmittanceLutUAV);
+
+		srvDesc = {};
+		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+		srvDesc.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;  // transmittance LUT format
+		srvDesc.Texture2D.MostDetailedMip = 0;
+		srvDesc.Texture2D.MipLevels = 1;
+		srvDesc.Texture2D.PlaneSlice = 0;
+		mTransmittanceLut->CreateShaderResourceView(&srvDesc, &mTransmittanceLutSRV);
+
+		uavDesc = {};
+		uavDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;  // MultiScat LUT format
+		uavDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
+		uavDesc.Texture2D.PlaneSlice = 0;
+		uavDesc.Texture2D.MipSlice = 0;
+		mMultiScatLut->CreateUnorderedAccessView(&uavDesc, &mMultiScatLutUAV);
+
+        srvDesc = {};
+		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+		srvDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;  // MultiScat LUT format
+		srvDesc.Texture2D.MostDetailedMip = 0;
+		srvDesc.Texture2D.MipLevels = 1;
+		srvDesc.Texture2D.PlaneSlice = 0;
+		mMultiScatLut->CreateShaderResourceView(&srvDesc, &mMultiScatLutSRV);
+
+		uavDesc = {};
+		uavDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;  // SkyView LUT format
+		uavDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
+		uavDesc.Texture2D.PlaneSlice = 0;
+		uavDesc.Texture2D.MipSlice = 0;
+		mSkyViewLut->CreateUnorderedAccessView(&uavDesc, &mSkyViewLutUAV);
+
+		srvDesc = {};
+		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+		srvDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;  // SkyView LUT format
+		srvDesc.Texture2D.MostDetailedMip = 0;
+		srvDesc.Texture2D.MipLevels = 1;
+		srvDesc.Texture2D.PlaneSlice = 0;
+		mSkyViewLut->CreateShaderResourceView(&srvDesc, &mSkyViewLutSRV);
+
+		uavDesc = {};
+		uavDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;  // Aerial Persp LUT format
+		uavDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE3D;
+		uavDesc.Texture3D.FirstWSlice = 0;
+		uavDesc.Texture3D.MipSlice = 0;
+		uavDesc.Texture3D.WSize = 32;
+		mAerialPerpspectiveLut->CreateUnorderedAccessView(&uavDesc, &mAerialPerpspectiveLutUAV);
+
+		srvDesc = {};
+		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE3D;
+		srvDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;  // Aerial Persp LUT format
+		srvDesc.Texture3D.MostDetailedMip = 0;
+		srvDesc.Texture3D.MipLevels = 1;
+		mAerialPerpspectiveLut->CreateShaderResourceView(&srvDesc, &mAerialPerpspectiveLutSRV);
+
+		uavDesc = {};
+		uavDesc.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;  // RayMarching format
+		uavDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
+		uavDesc.Texture2D.PlaneSlice = 0;
+		uavDesc.Texture2D.MipSlice = 0;
+		mRayMarchingResult->CreateUnorderedAccessView(&uavDesc, &mRayMarchingResultUAV);
+
+		srvDesc = {};
+		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+		srvDesc.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;  // RayMarching format
+		srvDesc.Texture2D.MostDetailedMip = 0;
+		srvDesc.Texture2D.MipLevels = 1;
+		srvDesc.Texture2D.PlaneSlice = 0;
+		mRayMarchingResult->CreateShaderResourceView(&srvDesc, &mRayMarchingResultSRV);
+	}
+
+	void SkyAtmosphere::ComputeAtmosphere(const std::shared_ptr<GCommandList>& cmdList,
         const std::shared_ptr<ConstantUploadBuffer<AtmosphereCommonConstants>>& AtmosphereCommonConstantsCB,
 	    const std::shared_ptr<ConstantUploadBuffer<AtmosphereConstants>>& AtmosphereConstantsCB,
 	    const SkyAtmosphereResources& Resources)
@@ -702,16 +738,11 @@ namespace Atmosphere
 
 	    cmdList->SetRootConstantBufferView((UINT)CBSlots::Common, *AtmosphereCommonConstantsCB);
 	    cmdList->SetRootConstantBufferView((UINT)CBSlots::Atmosphere, *AtmosphereConstantsCB);
-	    // 15th root parameter
-	    // cmdList->SetRootConstantBufferView((UINT)CBSlots::Count + (UINT)TextureSlots::Count + (UINT)UavSlots::Count + 1, *mTerrainCB, 0);
-
+	    
 	    cmdList->GetGraphicsCommandList()->IASetVertexBuffers(0, 0, nullptr);
 	    cmdList->GetGraphicsCommandList()->IASetIndexBuffer(nullptr);
 	    cmdList->GetGraphicsCommandList()->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 	    cmdList->Draw(6, mTerrainResolution * mTerrainResolution);
-
-	    // cmdList->TransitionBarrier(*mTerrainRenderTarget.get(), D3D12_RESOURCE_STATE_GENERIC_READ);
-	    // cmdList->FlushResourceBarriers();
 
 	    cmdList->EndMark();
     }
@@ -723,13 +754,10 @@ namespace Atmosphere
     {
 
         cmdList->StartMark(L"TransmittanceLUT");
-        // Set viewport/scissor to transmittance texture size
 
-        // Transition resource to UAV and clear
         cmdList->TransitionBarrier(Resources.GetTransmittanceLut(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
         cmdList->FlushResourceBarriers();
 
-        // Bind root signature and atmosphere CBs
         cmdList->GetGraphicsCommandList()->SetComputeRootSignature(Resources.GetRootSignature().GetNativeSignature().Get());
         cmdList->SetPipelineState(Resources.GetComputeTransmittancePSO());
         cmdList->SetDescriptorsHeap(Resources.GetRayMarchingResultSRV());
@@ -742,11 +770,10 @@ namespace Atmosphere
 
         auto IntDivRoundUp = [](UINT a, UINT b) { return (a + b - 1) / b; };
 
-        auto tgx = IntDivRoundUp(mLutInfos.TRANSMITTANCE_TEXTURE_WIDTH, 32);
-        auto tgy = IntDivRoundUp(mLutInfos.TRANSMITTANCE_TEXTURE_HEIGHT, 32);
+        auto tgx = IntDivRoundUp(mCommonConstanants.transmittanceLutResolution[0], 32);
+        auto tgy = IntDivRoundUp(mCommonConstanants.transmittanceLutResolution[1], 32);
         cmdList->Dispatch(tgx, tgy, 1);
 
-        // cmdList->TransitionBarrier(*mTransmittanceLut, D3D12_RESOURCE_STATE_COMMON);
         cmdList->FlushResourceBarriers();
         cmdList->EndMark();
     }
@@ -755,25 +782,19 @@ namespace Atmosphere
 	    const SkyAtmosphereResources& Resources)
     {
         cmdList->StartMark(L"MultiScatLUT");
-        // Set viewport/scissor to transmittance texture size
 
-        // Transition resource to UAV and clear
         cmdList->TransitionBarrier(Resources.GetTransmittanceLut(), D3D12_RESOURCE_STATE_GENERIC_READ);
         cmdList->TransitionBarrier(Resources.GetMultiScatLut(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
         cmdList->FlushResourceBarriers();
 
-        // cmdList->SetComputeRootSignature(*mRootSignature);
         cmdList->SetPipelineState(Resources.GetComputeMultiscatPSO());
     
         cmdList->SetComputeRootDescriptorTable((UINT)CBSlots::Count + (UINT)TextureSlots ::Transmittance, Resources.GetTransmittanceLutSRV());
 
         cmdList->SetComputeRootDescriptorTable((UINT)CBSlots::Count + (UINT)TextureSlots::Count + (UINT)UavSlots::Multiscat, Resources.GetMultiScatLutUAV());
 
-        const UINT MultiScatteringLUTRes = 32;
-        cmdList->Dispatch(MultiScatteringLUTRes, MultiScatteringLUTRes, 1);
+        cmdList->Dispatch(mCommonConstanants.multiScatLutResolution[0], mCommonConstanants.multiScatLutResolution[1], 1);
 
-        // cmdList->TransitionBarrier(*mMultiScatLut, D3D12_RESOURCE_STATE_COMMON);
-        // cmdList->FlushResourceBarriers();
         cmdList->EndMark();
     }
 
@@ -782,30 +803,23 @@ namespace Atmosphere
     {
 
         cmdList->StartMark(L"SkyViewLUT");
-        // Set viewport/scissor to transmittance texture size
 
-        // Transition resource to UAV and clear
-        // cmdList->TransitionBarrier(*mTransmittanceLut, D3D12_RESOURCE_STATE_GENERIC_READ);
         cmdList->TransitionBarrier(Resources.GetMultiScatLut(), D3D12_RESOURCE_STATE_GENERIC_READ);
         cmdList->TransitionBarrier(Resources.GetSkyViewLut(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
         cmdList->FlushResourceBarriers();
 
-        // cmdList->SetComputeRootSignature(*mRootSignature);
         cmdList->SetPipelineState(Resources.GetComputeSkyviewPSO());
 
         cmdList->SetComputeRootDescriptorTable((UINT)CBSlots::Count + (UINT)TextureSlots::Multiscat, Resources.GetMultiScatLutSRV());
 
         cmdList->SetComputeRootDescriptorTable((UINT)CBSlots::Count + (UINT)TextureSlots::Count + (UINT)UavSlots::SkyView, Resources.GetSkyViewLutUAV());
 
-        // cmdList->SetComputeRootDescriptorTable(5, &mTransmittanceLutSRV);
-
         auto IntDivRoundUp = [](UINT a, UINT b) { return (a + b - 1) / b; };
 
-        auto tgx = IntDivRoundUp(192, 32);
-        auto tgy = IntDivRoundUp(108, 32);
+        auto tgx = IntDivRoundUp(mCommonConstanants.skyViewLutResolution[0], 32);
+        auto tgy = IntDivRoundUp(mCommonConstanants.skyViewLutResolution[1], 32);
         cmdList->Dispatch(tgx, tgy, 1);
 
-        // cmdList->TransitionBarrier(*mSkyViewLut, D3D12_RESOURCE_STATE_COMMON);
         cmdList->FlushResourceBarriers();
         cmdList->EndMark();
     }
@@ -814,16 +828,11 @@ namespace Atmosphere
 	    const SkyAtmosphereResources& Resources)
     {
         cmdList->StartMark(L"AerialPerspLUT");
-        // Set viewport/scissor to transmittance texture size
 
-        // Transition resource to UAV and clear
-        // cmdList->TransitionBarrier(*mTransmittanceLut, D3D12_RESOURCE_STATE_GENERIC_READ);
-        // cmdList->TransitionBarrier(*mMultiScatLut, D3D12_RESOURCE_STATE_GENERIC_READ);
         cmdList->TransitionBarrier(Resources.GetSkyViewLut(), D3D12_RESOURCE_STATE_GENERIC_READ);
         cmdList->TransitionBarrier(Resources.GetAerialPerpspectiveLut(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
         cmdList->FlushResourceBarriers();
 
-        // cmdList->SetComputeRootSignature(*mRootSignature);
         cmdList->SetPipelineState(Resources.GetComputeAerialPSO());
 
         cmdList->SetComputeRootDescriptorTable((UINT)CBSlots::Count + (UINT)TextureSlots::SkyView, Resources.GetSkyViewLutSRV());
@@ -831,13 +840,11 @@ namespace Atmosphere
         cmdList->SetComputeRootDescriptorTable((UINT)CBSlots::Count + (UINT)TextureSlots::Count + (UINT)UavSlots::Aerial,
             Resources.GetAerialPerpspectiveLutUAV());
 
-        // cmdList->SetComputeRootDescriptorTable(5, &mTransmittanceLutSRV);
-
         auto IntDivRoundUp = [](UINT a, UINT b) { return (a + b - 1) / b; };
 
-        auto tgx = IntDivRoundUp(32, 32);
-        auto tgy = IntDivRoundUp(32, 32);
-        auto tgz = IntDivRoundUp(32, 1);
+        auto tgx = IntDivRoundUp(mCommonConstanants.aerialPerpspectiveLutResolution[0], 32);
+        auto tgy = IntDivRoundUp(mCommonConstanants.aerialPerpspectiveLutResolution[1], 32);
+        auto tgz = IntDivRoundUp(mCommonConstanants.aerialPerpspectiveLutResolution[2], 1);
         cmdList->Dispatch(tgx, tgy, tgz);
 
         cmdList->EndMark();
@@ -847,18 +854,13 @@ namespace Atmosphere
 	    const SkyAtmosphereResources& Resources)
     {
         cmdList->StartMark(L"RayMarchingLUT");
-        // Set viewport/scissor to transmittance texture size
 
-        // Transition resource to UAV and clear
-        // cmdList->TransitionBarrier(*mTransmittanceLut, D3D12_RESOURCE_STATE_GENERIC_READ);
-        // cmdList->TransitionBarrier(*mMultiScatLut, D3D12_RESOURCE_STATE_GENERIC_READ);
         cmdList->TransitionBarrier(Resources.GetAerialPerpspectiveLut(), D3D12_RESOURCE_STATE_GENERIC_READ);
         cmdList->TransitionBarrier(Resources.GetDepthMap(), D3D12_RESOURCE_STATE_GENERIC_READ);
         cmdList->TransitionBarrier(Resources.GetTerrainRender(), D3D12_RESOURCE_STATE_GENERIC_READ);
         cmdList->TransitionBarrier(Resources.GetRayMarchingResult(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
         cmdList->FlushResourceBarriers();
 
-        // cmdList->SetComputeRootSignature(*mRootSignature);
         cmdList->SetPipelineState(Resources.GetComputeRaymarchPSO());
 
         cmdList->SetComputeRootDescriptorTable((UINT)CBSlots::Count + (UINT)TextureSlots::Aerial, Resources.GetAerialPerpspectiveLutSRV());
@@ -868,12 +870,10 @@ namespace Atmosphere
         cmdList->SetComputeRootDescriptorTable((UINT)CBSlots::Count + (UINT)TextureSlots::Count + (UINT)UavSlots::RayMarching,
             Resources.GetRayMarchingResultUAV());
 
-        // cmdList->SetComputeRootDescriptorTable(5, &mTransmittanceLutSRV);
-
         auto IntDivRoundUp = [](UINT a, UINT b) { return (a + b - 1) / b; };
 
-        auto tgx = IntDivRoundUp(1920, 32);
-        auto tgy = IntDivRoundUp(1080, 32);
+        auto tgx = IntDivRoundUp(mCommonConstanants.rayMarchingResolution[0], 32);
+        auto tgy = IntDivRoundUp(mCommonConstanants.rayMarchingResolution[1], 32);
         cmdList->Dispatch(tgx, tgy, 1);
 
         cmdList->TransitionBarrier(Resources.GetRayMarchingResult(), D3D12_RESOURCE_STATE_GENERIC_READ);
@@ -913,17 +913,7 @@ namespace Atmosphere
         mAtmosphereConstants.bottom_radius = mAtmosphereInfos.bottom_radius;
         mAtmosphereConstants.top_radius = mAtmosphereInfos.top_radius;
         mAtmosphereConstants.MultipleScatteringFactor = 1;
-        mAtmosphereConstants.MultiScatteringLUTRes = mCommonConstanants.multiScatLutResolution[0];
 
-        //
-        // mAtmosphereConstants.TRANSMITTANCE_TEXTURE_WIDTH = mLutInfos.TRANSMITTANCE_TEXTURE_WIDTH;
-        // mAtmosphereConstants.TRANSMITTANCE_TEXTURE_HEIGHT = mLutInfos.TRANSMITTANCE_TEXTURE_HEIGHT;
-        // mAtmosphereConstants.IRRADIANCE_TEXTURE_WIDTH = mLutInfos.IRRADIANCE_TEXTURE_WIDTH;
-        // mAtmosphereConstants.IRRADIANCE_TEXTURE_HEIGHT = mLutInfos.IRRADIANCE_TEXTURE_HEIGHT;
-        // mAtmosphereConstants.SCATTERING_TEXTURE_R_SIZE = mLutInfos.SCATTERING_TEXTURE_R_SIZE;
-        // mAtmosphereConstants.SCATTERING_TEXTURE_MU_SIZE = mLutInfos.SCATTERING_TEXTURE_MU_SIZE;
-        // mAtmosphereConstants.SCATTERING_TEXTURE_MU_S_SIZE = mLutInfos.SCATTERING_TEXTURE_MU_S_SIZE;
-        // mAtmosphereConstants.SCATTERING_TEXTURE_NU_SIZE = mLutInfos.SCATTERING_TEXTURE_NU_SIZE;
         mAtmosphereConstants.SKY_SPECTRAL_RADIANCE_TO_LUMINANCE = Vector3(114974.916437f, 71305.954816f, 65310.548555f); // Not used if using LUTs as transfert
         mAtmosphereConstants.SUN_SPECTRAL_RADIANCE_TO_LUMINANCE = Vector3(98242.786222f, 69954.398112f, 66475.012354f);  // idem
 
@@ -966,7 +956,17 @@ namespace Atmosphere
 
     void SkyAtmosphereCrossResources::OnResize(uint32_t width, uint32_t height) const
     {
-        mRayMarchingResult->Resize(width, height);
+		auto terrainRes = TextureResolutions::GetResolutionBasedOnScreenResolution(
+            width, height, TextureResolutions::Type::TerrainRender);
+        auto transmRes = TextureResolutions::GetResolutionBasedOnScreenResolution(
+            width, height, TextureResolutions::Type::Transmittance);
+        auto rayMarchRes = TextureResolutions::GetResolutionBasedOnScreenResolution(
+            width, height, TextureResolutions::Type::RayMarching);
+
+        mTerrainRenderTarget->Resize(terrainRes.first, terrainRes.second);
+        mDepthMap->Resize(terrainRes.first, terrainRes.second);
+		mTransmittanceLut->Resize(transmRes.first, transmRes.second);
+        mRayMarchingResult->Resize(rayMarchRes.first, rayMarchRes.second);
     }
 
     SkyAtmosphereResources::SkyAtmosphereResources()
@@ -976,15 +976,89 @@ namespace Atmosphere
 
     void SkyAtmosphereResources::Initialize(const std::shared_ptr<GDevice>& device, UINT screenWidth /*= 1920*/, UINT screenHeight /*= 1080*/, uint32_t terrainResolution /*= 512u*/)
     {
-
 	    mScreenWidth = screenWidth;
 	    mScreenHeight = screenHeight;
         mDevice = device;
         mTerrainResolution = terrainResolution;
 
-	    LoadResources();
+		mTerrainRenderTargetRTV = mDevice->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, 1);
+		mTerrainRenderTargetSRV = mDevice->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 1);
+
+		mDepthMapSRV = mDevice->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 1);
+		mDepthMapDSV = mDevice->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_DSV, 1);
+
+		mHeightMapTexSRV = mDevice->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 1);
+
+		mTransmittanceLutUAV = mDevice->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 1);
+		mTransmittanceLutSRV = mDevice->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 1);
+
+		mMultiScatLutUAV = mDevice->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 1);
+		mMultiScatLutSRV = mDevice->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 1);
+
+		mSkyViewLutUAV = mDevice->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 1);
+		mSkyViewLutSRV = mDevice->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 1);
+
+		mAerialPerpspectiveLutUAV = mDevice->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 1);
+		mAerialPerpspectiveLutSRV = mDevice->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 1);
+
+		mRayMarchingResultUAV = mDevice->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 1);
+		mRayMarchingResultSRV = mDevice->AllocateDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 1);
+
+		// Height Map
+		auto queue = mDevice->GetCommandQueue(GQueueType::Compute);
+		const auto cmdList = queue->GetCommandList();
+		mHeightMapTex = GTexture::LoadTextureFromFile(L"Data\\Textures\\heightmap.dds", cmdList);
+		mHeightMapTex->SetName(L"heightMapTex");
+		queue->WaitForFenceValue(queue->ExecuteCommandList(cmdList));
+		mDevice->Flush();
+
+
+		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+
+		auto desc = mHeightMapTex->GetD3D12Resource()->GetDesc();
+		srvDesc.Format = GetSRGBFormat(desc.Format);
+		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+		srvDesc.Texture2D.MipLevels = desc.MipLevels;
+		srvDesc.Texture2D.MostDetailedMip = 0;
+		mHeightMapTex->CreateShaderResourceView(&srvDesc, &mHeightMapTexSRV);
+
+	    OnResize(mScreenWidth, mScreenHeight);
 	    InitRootSignatures();
 	    LoadShaders();
 	    InitPSOs();
     }
+
+	void SkyAtmosphereResources::OnResize(UINT screenWidth, UINT screenHeight)
+	{
+		mScreenWidth = screenWidth;
+		mScreenHeight = screenHeight;
+
+        auto terrainRes = TextureResolutions::GetResolutionBasedOnScreenResolution(
+            screenWidth, screenHeight, TextureResolutions::Type::TerrainRender);
+        TerrainResourceResize(terrainRes.first, terrainRes.second);
+
+		auto transmRes = TextureResolutions::GetResolutionBasedOnScreenResolution(
+			screenWidth, screenHeight, TextureResolutions::Type::Transmittance);
+		TransmittanceLutResourceResize(transmRes.first, transmRes.second);
+
+		auto multiScatRes = TextureResolutions::GetResolutionBasedOnScreenResolution(
+			screenWidth, screenHeight, TextureResolutions::Type::Multiscat);        
+		MultiScatLutResourceResize(multiScatRes.first, multiScatRes.second);
+
+		auto skyViewRes = TextureResolutions::GetResolutionBasedOnScreenResolution(
+			screenWidth, screenHeight, TextureResolutions::Type::SkyView);
+		SkyViewLutResourceResize(skyViewRes.first, skyViewRes.second);
+
+		auto aerialRes = TextureResolutions::GetResolutionBasedOnScreenResolution(
+			screenWidth, screenHeight, TextureResolutions::Type::Aerial);
+		AerialPerpspectiveLutResourceResize(aerialRes.first, aerialRes.second);
+
+		auto rayMarchRes = TextureResolutions::GetResolutionBasedOnScreenResolution(
+			screenWidth, screenHeight, TextureResolutions::Type::RayMarching);
+		RayMarchingResourceResize(rayMarchRes.first, rayMarchRes.second);
+
+        RebuildDescriptors();
+	}
+
 }
