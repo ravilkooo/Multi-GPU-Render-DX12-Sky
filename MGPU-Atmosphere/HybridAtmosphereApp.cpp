@@ -601,7 +601,7 @@ bool HybridAtmosphereApp::Initialize()
 
     int TestTime = 10;
 #if !defined(DEBUG) && !defined(_DEBUG)
-    TestTime = 120;
+    TestTime = 8;
 #endif
 
 
@@ -938,7 +938,6 @@ void HybridAtmosphereApp::LoadModels()
     auto queue = primeDevice->GetCommandQueue(GQueueType::Compute);
     auto cmdList = queue->GetCommandList();
 
-    /*
     auto nano = assets->CreateModelFromFile(cmdList, "Data\\Objects\\Nanosuit\\Nanosuit.obj");
     models[L"nano"] = std::move(nano);
 
@@ -960,7 +959,6 @@ void HybridAtmosphereApp::LoadModels()
         cmdList, "Data\\Objects\\DesertDragon\\DesertDragon.FBX");
     desertDragon->scaleMatrix = Matrix::CreateScale(0.1);
     models[L"desertDragon"] = std::move(desertDragon);
-    */
 
     auto sphere = assets->GenerateSphere(cmdList);
     models[L"sphere"] = std::move(sphere);
@@ -983,10 +981,9 @@ void HybridAtmosphereApp::LoadModels()
     auto platform = assets->CreateModelFromFile(
         cmdList, "Data\\Objects\\Temple\\SM_PlatformSquare.FBX");
     models[L"platform"] = std::move(platform);
-    /*
+    
     auto doom = assets->CreateModelFromFile(cmdList, "Data\\Objects\\DoomSlayer\\doommarine.obj");
     models[L"doom"] = std::move(doom);
-    */
 
     queue->WaitForFenceValue(queue->ExecuteCommandList(cmdList));
     Flush();
@@ -1103,7 +1100,6 @@ void HybridAtmosphereApp::CreateGO()
     sun1->AddComponent(light);
     gameObjects.push_back(std::move(sun1));
 
-    /*
     for (int i = 0; i < 11; ++i)
     {
         auto nano = std::make_unique<GameObject>();
@@ -1149,7 +1145,7 @@ void HybridAtmosphereApp::CreateGO()
             gameObjects.push_back(std::move(pbody));
         }
     }
-    */
+
     auto particle = std::make_unique<GameObject>();
     particle->GetTransform()->SetPosition(Vector3::Up + deltaUp);
     const auto emitter = std::make_shared<ParticleEmitter>(primeDevice, 10000);
@@ -1226,7 +1222,6 @@ void HybridAtmosphereApp::CreateGO()
     gameObjects.push_back(std::move(columns));
     gameObjects.push_back(std::move(fountain));
 
-    /*
     auto mountDragon = std::make_unique<GameObject>();
     mountDragon->GetTransform()->SetEulerRotate(Vector3(90, 0, 0));
     mountDragon->GetTransform()->SetPosition(Vector3::Right * -960 + Vector3::Up * 45 + Vector3::Backward * 775
@@ -1265,7 +1260,7 @@ void HybridAtmosphereApp::CreateGO()
     griffon->AddComponent(renderer);
     typedRenderer[static_cast<int>(RenderMode::OpaqueAlphaDrop)].push_back(renderer);
     gameObjects.push_back(std::move(griffon));
-    */
+    
     debugLogger.PushMessage(std::wstring(L"\nFinish create GO"));
 }
 
