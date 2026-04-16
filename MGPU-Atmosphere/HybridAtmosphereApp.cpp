@@ -607,44 +607,44 @@ bool HybridAtmosphereApp::Initialize()
 #endif
 
 
-    auto& NativeSSAOState = benchmark.AddState<WaitState>(TestTime, FileQueueWriter(Benchmark::GetLogFile(L"Native Atmosphere ", *primeDevice, *secondDevice)));
-    NativeSSAOState.OnEnter = [](FileQueueWriter& logs)
+    auto& NativeAtmosphereState = benchmark.AddState<WaitState>(TestTime, FileQueueWriter(Benchmark::GetLogFile(L"Native Atmosphere ", *primeDevice, *secondDevice)));
+    NativeAtmosphereState.OnEnter = [](FileQueueWriter& logs)
     {
         logs.PushMessage(L"FPS;MSPF;MinFPS;MinMSPF;MaxFPS;MaxMSPF");
     };
 
-    NativeSSAOState.OnStatChanged = [this](FileQueueWriter& logs, const TimeStats& ts, float progress)
+    NativeAtmosphereState.OnStatChanged = [this](FileQueueWriter& logs, const TimeStats& ts, float progress)
     {
         Benchmark::PrintStatsCSV(ts, logs);
-        MainWindow->SetWindowTitle(L"Native SSAO Progress " + std::format(L"{:.2f}", progress * 100) + L"% FPS:" + std::to_wstring(ts.fps));
+        MainWindow->SetWindowTitle(L"Native Atmosphere Progress " + std::format(L"{:.2f}", progress * 100) + L"% FPS:" + std::to_wstring(ts.fps));
     };
 
-    NativeSSAOState.OnExit = [this](FileQueueWriter& logs)
+    NativeAtmosphereState.OnExit = [this](FileQueueWriter& logs)
     {
         logs.WriteAllLog();
         Flush();
     };
 
-    auto& HybridSSAOState = benchmark.AddState<WaitState>(TestTime, FileQueueWriter(Benchmark::GetLogFile(L"Hybrid Atmosphere ", *primeDevice, *secondDevice)));
-    HybridSSAOState.OnEnter = [this](FileQueueWriter& logs)
+    auto& HybridAtmosphereState = benchmark.AddState<WaitState>(TestTime, FileQueueWriter(Benchmark::GetLogFile(L"Hybrid Atmosphere ", *primeDevice, *secondDevice)));
+    HybridAtmosphereState.OnEnter = [this](FileQueueWriter& logs)
     {
         ResetCamera();
         SwitchDevice();
         logs.PushMessage(L"FPS;MSPF;MinFPS;MinMSPF;MaxFPS;MaxMSPF");
     };
-    HybridSSAOState.OnStatChanged = [this](FileQueueWriter& logs, const TimeStats& ts, float progress)
+    HybridAtmosphereState.OnStatChanged = [this](FileQueueWriter& logs, const TimeStats& ts, float progress)
     {
         Benchmark::PrintStatsCSV(ts, logs);
-        MainWindow->SetWindowTitle(L"Hybrid SSAO Progress " + std::format(L"{:.2f}", progress * 100) + L"% FPS:" + std::to_wstring(ts.fps));
+        MainWindow->SetWindowTitle(L"Hybrid Atmosphere Progress " + std::format(L"{:.2f}", progress * 100) + L"% FPS:" + std::to_wstring(ts.fps));
     };
-    HybridSSAOState.OnExit = [this](FileQueueWriter& logs)
+    HybridAtmosphereState.OnExit = [this](FileQueueWriter& logs)
     {
         logs.WriteAllLog();
         Flush();
         SwitchDevice();
     };
 
-
+    /*
     auto& NativeHBAOState = benchmark.AddState<WaitState>(TestTime, FileQueueWriter(Benchmark::GetLogFile(L"Native Atmosphere Terrain ", *primeDevice, *secondDevice)));
     NativeHBAOState.OnEnter = [this](FileQueueWriter& logs)
     {
@@ -654,27 +654,29 @@ bool HybridAtmosphereApp::Initialize()
     NativeHBAOState.OnStatChanged = [this](FileQueueWriter& logs, const TimeStats& ts, float progress)
     {
         Benchmark::PrintStatsCSV(ts, logs);
-        MainWindow->SetWindowTitle(L"Native HBAO Progress " + std::format(L"{:.2f}", progress * 100) + L"% FPS:" + std::to_wstring(ts.fps));
+        MainWindow->SetWindowTitle(L"Native Atmosphere Terrain Progress " + std::format(L"{:.2f}", progress * 100) + L"% FPS:" + std::to_wstring(ts.fps));
     };
     NativeHBAOState.OnExit = [this](FileQueueWriter& logs)
     {
         logs.WriteAllLog();
         Flush();
     };
+    */
 
-    auto& HybridHBAOState = benchmark.AddState<WaitState>(TestTime, FileQueueWriter(Benchmark::GetLogFile(L"Hybrid Atmosphere Terrain ", *primeDevice, *secondDevice)));
-    HybridHBAOState.OnEnter = [this](FileQueueWriter& logs)
+    auto& HybridAtmosphereTerrainState = benchmark.AddState<WaitState>(TestTime, FileQueueWriter(Benchmark::GetLogFile(L"Hybrid Atmosphere Terrain ", *primeDevice, *secondDevice)));
+    HybridAtmosphereTerrainState.OnEnter = [this](FileQueueWriter& logs)
     {
         ResetCamera();
         logs.PushMessage(L"FPS;MSPF;MinFPS;MinMSPF;MaxFPS;MaxMSPF");
         SwitchDevice();
+        ChangeConfiguration();
     };
-    HybridHBAOState.OnStatChanged = [this](FileQueueWriter& logs, const TimeStats& ts, float progress)
+    HybridAtmosphereTerrainState.OnStatChanged = [this](FileQueueWriter& logs, const TimeStats& ts, float progress)
     {
         Benchmark::PrintStatsCSV(ts, logs);
-        MainWindow->SetWindowTitle(L"Hybrid HBAO Progress " + std::format(L"{:.2f}", progress * 100) + L"% FPS:" + std::to_wstring(ts.fps));
+        MainWindow->SetWindowTitle(L"Hybrid Atmosphere Terrain Progress " + std::format(L"{:.2f}", progress * 100) + L"% FPS:" + std::to_wstring(ts.fps));
     };
-    HybridHBAOState.OnExit = [this](FileQueueWriter& logs)
+    HybridAtmosphereTerrainState.OnExit = [this](FileQueueWriter& logs)
     {
         logs.WriteAllLog();
         SwitchDevice();
