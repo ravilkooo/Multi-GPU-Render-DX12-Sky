@@ -36,10 +36,10 @@ void HybridAtmosphereApp::SwitchDevice()
     IsUsingSharedAtmosphere = !IsUsingSharedAtmosphere;
 }
 
-void HybridAtmosphereApp::ChangeAOMethod()
+void HybridAtmosphereApp::ChangeConfiguration()
 {
     Flush();
-    IsUseHBAO = !IsUseHBAO;
+    IsSharedTerrain = !IsSharedTerrain;
 }
 
 void HybridAtmosphereApp::ResetCamera() const
@@ -223,48 +223,87 @@ void HybridAtmosphereApp::UpdateAtmosphere()
 void HybridAtmosphereApp::PopulateAtmosphereCommands(const std::shared_ptr<GCommandList>& cmdList,
 	const Atmosphere::SkyAtmosphereResources& Resources)
 {
-	// Must be before RayMarchingCommands
-	skyAtmosphere->PopulateTerrainCommands(cmdList,
-		currentFrameResource->PrimeAtmosphereCommonUploadBuffer,
-		currentFrameResource->PrimeAtmosphereUploadBuffer, Resources);
 
     if (IsUsingSharedAtmosphere)
     {
-        {
-            const auto& Resources = skyAtmosphere->GetPrimeResources();
-			const auto& CrossResources = skyAtmosphere->GetCrossResources();
+        if (!IsSharedTerrain)
+		{
+			// Must be before RayMarchingCommands
+			skyAtmosphere->PopulateTerrainCommands(cmdList,
+				currentFrameResource->PrimeAtmosphereCommonUploadBuffer,
+				currentFrameResource->PrimeAtmosphereUploadBuffer, Resources);
 
-            cmdList->CopyResource(CrossResources.GetTerrainRenderTarget().GetPrimeResource(), Resources.GetTerrainRender());
-            cmdList->CopyResource(CrossResources.GetDepthMap().GetPrimeResource(), Resources.GetDepthMap());
+            {
+                const auto& Resources = skyAtmosphere->GetPrimeResources();
+                const auto& CrossResources = skyAtmosphere->GetCrossResources();
 
-			cmdList->CopyResource(Resources.GetRayMarchingResult(), CrossResources.GetRayMarchingResult().GetPrimeResource());
-			cmdList->CopyResource(Resources.GetTransmittanceLut(), CrossResources.GetTransmittanceLut().GetPrimeResource());
+                cmdList->CopyResource(CrossResources.GetTerrainRenderTarget().GetPrimeResource(), Resources.GetTerrainRender());
+                cmdList->CopyResource(CrossResources.GetDepthMap().GetPrimeResource(), Resources.GetDepthMap());
 
+                cmdList->CopyResource(Resources.GetRayMarchingResult(), CrossResources.GetRayMarchingResult().GetPrimeResource());
+                cmdList->CopyResource(Resources.GetTransmittanceLut(), CrossResources.GetTransmittanceLut().GetPrimeResource());
+
+            }
+            auto secondQueue = secondDevice->GetCommandQueue();
+
+            if (currentFrameResource->SecondRenderFenceValue == 0 || secondQueue->IsFinish(currentFrameResource->SecondRenderFenceValue))
+            {
+                const auto& SecondResources = skyAtmosphere->GetSecondResource();
+                const auto& SecondCrossResources = skyAtmosphere->GetCrossResources();
+                const auto secondCmdList = secondQueue->GetCommandList();
+
+                secondCmdList->CopyResource(SecondResources.GetTerrainRender(), SecondCrossResources.GetTerrainRenderTarget().GetSharedResource());
+                secondCmdList->CopyResource(SecondResources.GetDepthMap(), SecondCrossResources.GetDepthMap().GetSharedResource());
+
+                skyAtmosphere->ComputeAtmosphere(secondCmdList,
+                    currentFrameResource->SecondAtmosphereCommonUploadBuffer,
+                    currentFrameResource->SecondAtmosphereUploadBuffer, SecondResources);
+
+                secondCmdList->CopyResource(SecondCrossResources.GetRayMarchingResult().GetSharedResource(), SecondResources.GetRayMarchingResult());
+                secondCmdList->CopyResource(SecondCrossResources.GetTransmittanceLut().GetSharedResource(), SecondResources.GetTransmittanceLut());
+
+                currentFrameResource->SecondRenderFenceValue = secondQueue->ExecuteCommandList(secondCmdList);
+            }
         }
-        auto secondQueue = secondDevice->GetCommandQueue();
-
-        if (currentFrameResource->SecondRenderFenceValue == 0 || secondQueue->IsFinish(currentFrameResource->SecondRenderFenceValue))
+        else
         {
-            const auto& SecondResources = skyAtmosphere->GetSecondResource();
-            const auto& SecondCrossResources = skyAtmosphere->GetCrossResources();
-            const auto secondCmdList = secondQueue->GetCommandList();
+			{
+				const auto& Resources = skyAtmosphere->GetPrimeResources();
+				const auto& CrossResources = skyAtmosphere->GetCrossResources();
 
-			secondCmdList->CopyResource(SecondResources.GetTerrainRender(), SecondCrossResources.GetTerrainRenderTarget().GetSharedResource());
-			secondCmdList->CopyResource(SecondResources.GetDepthMap(), SecondCrossResources.GetDepthMap().GetSharedResource());
-            
-			skyAtmosphere->ComputeAtmosphere(secondCmdList,
-				currentFrameResource->SecondAtmosphereCommonUploadBuffer,
-				currentFrameResource->SecondAtmosphereUploadBuffer, SecondResources);
+				cmdList->CopyResource(Resources.GetRayMarchingResult(), CrossResources.GetRayMarchingResult().GetPrimeResource());
 
-			secondCmdList->CopyResource(SecondCrossResources.GetRayMarchingResult().GetSharedResource(), SecondResources.GetRayMarchingResult());
-			secondCmdList->CopyResource(SecondCrossResources.GetTransmittanceLut().GetSharedResource(), SecondResources.GetTransmittanceLut());
+			}
+			auto secondQueue = secondDevice->GetCommandQueue();
 
-            currentFrameResource->SecondRenderFenceValue = secondQueue->ExecuteCommandList(secondCmdList);
+			if (currentFrameResource->SecondRenderFenceValue == 0 || secondQueue->IsFinish(currentFrameResource->SecondRenderFenceValue))
+			{
+				const auto& SecondResources = skyAtmosphere->GetSecondResource();
+				const auto& SecondCrossResources = skyAtmosphere->GetCrossResources();
+				const auto secondCmdList = secondQueue->GetCommandList();
+
+				// Must be before RayMarchingCommands
+				skyAtmosphere->PopulateTerrainCommands(secondCmdList,
+					currentFrameResource->SecondAtmosphereCommonUploadBuffer,
+					currentFrameResource->SecondAtmosphereUploadBuffer, SecondResources);
+
+				skyAtmosphere->ComputeAtmosphere(secondCmdList,
+					currentFrameResource->SecondAtmosphereCommonUploadBuffer,
+					currentFrameResource->SecondAtmosphereUploadBuffer, SecondResources);
+
+				secondCmdList->CopyResource(SecondCrossResources.GetRayMarchingResult().GetSharedResource(), SecondResources.GetRayMarchingResult());
+
+				currentFrameResource->SecondRenderFenceValue = secondQueue->ExecuteCommandList(secondCmdList);
+			}
         }
-
     }
     else
-    {
+	{
+		// Must be before RayMarchingCommands
+		skyAtmosphere->PopulateTerrainCommands(cmdList,
+			currentFrameResource->PrimeAtmosphereCommonUploadBuffer,
+			currentFrameResource->PrimeAtmosphereUploadBuffer, Resources);
+
 		skyAtmosphere->ComputeAtmosphere(cmdList,
 			currentFrameResource->PrimeAtmosphereCommonUploadBuffer,
 			currentFrameResource->PrimeAtmosphereUploadBuffer, Resources);
@@ -315,7 +354,7 @@ void HybridAtmosphereApp::PopulateNormalMapCommands(const std::shared_ptr<GComma
         const GDescriptor* normalMapRtv;
         const GDescriptor* normalMapDsv;
 
-
+        /*
         if (IsUseHBAO)
         {
             const HBAOResources& Resources = hbaoPass->GetPrimeResources();
@@ -325,6 +364,7 @@ void HybridAtmosphereApp::PopulateNormalMapCommands(const std::shared_ptr<GComma
             normalMapDsv = Resources.GetDepthMapDSV();
         }
         else
+        */
         {
             const SSAOResources& Resources = ssaoPass->GetPrimeResources();
             normalMap = Resources.GetNormalMap();
@@ -360,9 +400,11 @@ void HybridAtmosphereApp::PopulateNormalMapCommands(const std::shared_ptr<GComma
 
 void HybridAtmosphereApp::PopulateAmbientMapCommands(const std::shared_ptr<GCommandList>& cmdList) const
 {
+    /*
 	if (IsUseHBAO)
 		hbaoPass->Compute(cmdList, currentFrameResource->PrimeHBAOConstantUploadBuffer, hbaoPass->GetPrimeResources());
 	else
+    */
 		ssaoPass->ComputeSsao(cmdList, currentFrameResource->PrimeSsaoConstantUploadBuffer, ssaoPass->GetPrimeResources(), 3);
 }
 
@@ -395,9 +437,11 @@ void HybridAtmosphereApp::PopulateForwardPathCommands(const std::shared_ptr<GCom
                                       *currentFrameResource->PrimePassConstantUploadBuffer);
 
         cmdList->SetRootDescriptorTable(StandardShaderSlot::ShadowMap, shadowPath->GetSrv());
+        /*
         if (IsUseHBAO)
             cmdList->SetRootDescriptorTable(StandardShaderSlot::AmbientMap, hbaoPass->GetPrimeResources().GetAmbientMapSRV());
         else
+        */
             cmdList->SetRootDescriptorTable(StandardShaderSlot::AmbientMap, ssaoPass->GetPrimeResources().GetAmbientMapSRV(), 0);
 
 
@@ -480,11 +524,13 @@ void HybridAtmosphereApp::PopulateDebugCommands(const std::shared_ptr<GCommandLi
         }
     case 2:
         {
+        /*
             if (IsUseHBAO)
                 PopulateDrawFullQuadTexture(cmdList, hbaoPass->GetPrimeResources().GetAmbientMapSRV(),
                                             0, *defaultPrimePipelineResources.GetPSO(RenderMode::Quad));
 
             else
+        */
                 PopulateDrawFullQuadTexture(cmdList, ssaoPass->GetPrimeResources().GetAmbientMapSRV(),
                                             0, *defaultPrimePipelineResources.GetPSO(RenderMode::Quad));
 
@@ -561,7 +607,7 @@ bool HybridAtmosphereApp::Initialize()
 #endif
 
 
-    auto& NativeSSAOState = benchmark.AddState<WaitState>(TestTime, FileQueueWriter(Benchmark::GetLogFile(L"Native SSAO ", *primeDevice, *secondDevice)));
+    auto& NativeSSAOState = benchmark.AddState<WaitState>(TestTime, FileQueueWriter(Benchmark::GetLogFile(L"Native Atmosphere ", *primeDevice, *secondDevice)));
     NativeSSAOState.OnEnter = [](FileQueueWriter& logs)
     {
         logs.PushMessage(L"FPS;MSPF;MinFPS;MinMSPF;MaxFPS;MaxMSPF");
@@ -579,7 +625,7 @@ bool HybridAtmosphereApp::Initialize()
         Flush();
     };
 
-    auto& HybridSSAOState = benchmark.AddState<WaitState>(TestTime, FileQueueWriter(Benchmark::GetLogFile(L"Hybrid SSAO ", *primeDevice, *secondDevice)));
+    auto& HybridSSAOState = benchmark.AddState<WaitState>(TestTime, FileQueueWriter(Benchmark::GetLogFile(L"Hybrid Atmosphere ", *primeDevice, *secondDevice)));
     HybridSSAOState.OnEnter = [this](FileQueueWriter& logs)
     {
         ResetCamera();
@@ -599,7 +645,7 @@ bool HybridAtmosphereApp::Initialize()
     };
 
 
-    auto& NativeHBAOState = benchmark.AddState<WaitState>(TestTime, FileQueueWriter(Benchmark::GetLogFile(L"Native HBAO ", *primeDevice, *secondDevice)));
+    auto& NativeHBAOState = benchmark.AddState<WaitState>(TestTime, FileQueueWriter(Benchmark::GetLogFile(L"Native Atmosphere Terrain ", *primeDevice, *secondDevice)));
     NativeHBAOState.OnEnter = [this](FileQueueWriter& logs)
     {
         ResetCamera();
@@ -616,7 +662,7 @@ bool HybridAtmosphereApp::Initialize()
         Flush();
     };
 
-    auto& HybridHBAOState = benchmark.AddState<WaitState>(TestTime, FileQueueWriter(Benchmark::GetLogFile(L"Hybrid HBAO ", *primeDevice, *secondDevice)));
+    auto& HybridHBAOState = benchmark.AddState<WaitState>(TestTime, FileQueueWriter(Benchmark::GetLogFile(L"Hybrid Atmosphere Terrain ", *primeDevice, *secondDevice)));
     HybridHBAOState.OnEnter = [this](FileQueueWriter& logs)
     {
         ResetCamera();
@@ -1672,7 +1718,7 @@ LRESULT HybridAtmosphereApp::MsgProc(const HWND hwnd, const UINT msg, const WPAR
 
             if (keycode == (VK_F3) && keyboard.KeyIsPressed(VK_F3))
             {
-                IsUseHBAO = !IsUseHBAO;
+                IsSharedTerrain = !IsSharedTerrain;
                 Flush();
             }
 

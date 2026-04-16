@@ -682,11 +682,8 @@ namespace Atmosphere
 	    cmdList->StartMark(L"Terrain Draw");
 
         cmdList->GetGraphicsCommandList()->SetGraphicsRootSignature(Resources.GetRootSignature().GetNativeSignature().Get());
-	    cmdList->SetPipelineState(Resources.GetTerrainPSO());
-	    // cmdList->SetDescriptorsHeap(srvTexturesMemory);
-	    // cmdList->SetRootShaderResourceView(StandardShaderSlot::MaterialData,
-	    // 	*currentFrameResource->MaterialBuffer);
-	    // cmdList->SetRootDescriptorTable(StandardShaderSlot::TexturesMap, srvTexturesMemory);
+		cmdList->SetPipelineState(Resources.GetTerrainPSO());
+		cmdList->SetDescriptorsHeap(Resources.GetRayMarchingResultSRV());
 
 	    cmdList->SetViewports(&Resources.GetTerrainViewport(), 1);
 	    cmdList->SetScissorRects(&Resources.GetTerrainScissorRect(), 1);

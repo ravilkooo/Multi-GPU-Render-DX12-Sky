@@ -33,7 +33,7 @@ public:
     USHORT GetBlurCount() const { return blurCount; }
     void SetBlurPassCount(const USHORT blurCount) { this->blurCount = blurCount; }
     void SwitchDevice();
-    void ChangeAOMethod();
+    void ChangeConfiguration();
     void ResetCamera() const;
 
 protected:
@@ -133,7 +133,7 @@ protected:
     bool IsStop = false;
 
     bool IsUsingSharedAtmosphere = false;
-    bool IsUseHBAO = false;
+    bool IsSharedTerrain = false;
 
     UINT pathMapShow = 0;
     //off, shadowMap, ssaoMap
