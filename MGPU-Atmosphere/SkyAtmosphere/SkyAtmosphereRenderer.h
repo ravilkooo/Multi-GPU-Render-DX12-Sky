@@ -1,5 +1,5 @@
 #pragma once
-#include "C:\Users\user\my_catalogue\Studyspace\MGPU-sky-fork\Multi-GPU-Render-DX12-Sky\Common\ModelRenderer.h"
+#include "ModelRenderer.h"
 class SkyAtmosphereRenderer :
     public ModelRenderer
 {
