@@ -623,65 +623,76 @@ bool HybridAtmosphereApp::Initialize()
 #if !defined(DEBUG) && !defined(_DEBUG)
     TestTime = 100;
 #endif
+    int lastMultiplier = 8;
 
+    for (int multiplier = 1; multiplier <= lastMultiplier; multiplier++)
+    {
+        auto& NativeAtmosphereState = benchmark.AddState<WaitState>(TestTime, FileQueueWriter(Benchmark::GetLogFile(
+            std::format(L"Native Atmosphere (SSAA {}) ", multiplier), *primeDevice, *secondDevice)));
+        NativeAtmosphereState.OnEnter = [this, multiplier](FileQueueWriter& logs)
+			{
+				antiAliasingPrimePath->SetMultiplier(multiplier, MainWindow->GetClientWidth(), MainWindow->GetClientHeight());
+				logs.PushMessage(L"FPS;MSPF;MinFPS;MinMSPF;MaxFPS;MaxMSPF");
+			};
 
-    auto& NativeAtmosphereState = benchmark.AddState<WaitState>(TestTime, FileQueueWriter(Benchmark::GetLogFile(L"Native Atmosphere ", *primeDevice, *secondDevice)));
-    NativeAtmosphereState.OnEnter = [](FileQueueWriter& logs)
-    {
-        logs.PushMessage(L"FPS;MSPF;MinFPS;MinMSPF;MaxFPS;MaxMSPF");
-    };
+        NativeAtmosphereState.OnStatChanged = [this, multiplier](FileQueueWriter& logs, const TimeStats& ts, float progress)
+			{
+				Benchmark::PrintStatsCSV(ts, logs);
+				MainWindow->SetWindowTitle(std::format(L"Native Atmosphere (SSAA {}) Progress ", multiplier) +
+					std::format(L"{:.2f}", progress * 100) + L"% FPS:" + std::to_wstring(ts.fps));
+			};
 
-    NativeAtmosphereState.OnStatChanged = [this](FileQueueWriter& logs, const TimeStats& ts, float progress)
-    {
-        Benchmark::PrintStatsCSV(ts, logs);
-        MainWindow->SetWindowTitle(L"Native Atmosphere Progress " + std::format(L"{:.2f}", progress * 100) + L"% FPS:" + std::to_wstring(ts.fps));
-    };
+        NativeAtmosphereState.OnExit = [this](FileQueueWriter& logs)
+			{
+				logs.WriteAllLog();
+				Flush();
+			};
 
-    NativeAtmosphereState.OnExit = [this](FileQueueWriter& logs)
-    {
-        logs.WriteAllLog();
-        Flush();
-    };
+        auto& HybridAtmosphereState = benchmark.AddState<WaitState>(TestTime, FileQueueWriter(Benchmark::GetLogFile(
+            std::format(L"Hybrid Atmosphere (SSAA {}) ", multiplier), *primeDevice, *secondDevice)));
+        HybridAtmosphereState.OnEnter = [this](FileQueueWriter& logs)
+        {
+            ResetCamera();
+            SwitchDevice();
+            logs.PushMessage(L"FPS;MSPF;MinFPS;MinMSPF;MaxFPS;MaxMSPF");
+        };
+        HybridAtmosphereState.OnStatChanged = [this, multiplier](FileQueueWriter& logs, const TimeStats& ts, float progress)
+            {
+                Benchmark::PrintStatsCSV(ts, logs);
+                MainWindow->SetWindowTitle(std::format(L"Hybrid Atmosphere (SSAA {}) Progress ", multiplier) +
+                    std::format(L"{:.2f}", progress * 100) + L"% FPS:" + std::to_wstring(ts.fps));
+            };
+        HybridAtmosphereState.OnExit = [this](FileQueueWriter& logs)
+            {
+                logs.WriteAllLog();
+                Flush();
+                SwitchDevice();
+            };
 
-    auto& HybridAtmosphereState = benchmark.AddState<WaitState>(TestTime, FileQueueWriter(Benchmark::GetLogFile(L"Hybrid Atmosphere ", *primeDevice, *secondDevice)));
-    HybridAtmosphereState.OnEnter = [this](FileQueueWriter& logs)
-    {
-        ResetCamera();
-        SwitchDevice();
-        logs.PushMessage(L"FPS;MSPF;MinFPS;MinMSPF;MaxFPS;MaxMSPF");
-    };
-    HybridAtmosphereState.OnStatChanged = [this](FileQueueWriter& logs, const TimeStats& ts, float progress)
-    {
-        Benchmark::PrintStatsCSV(ts, logs);
-        MainWindow->SetWindowTitle(L"Hybrid Atmosphere Progress " + std::format(L"{:.2f}", progress * 100) + L"% FPS:" + std::to_wstring(ts.fps));
-    };
-    HybridAtmosphereState.OnExit = [this](FileQueueWriter& logs)
-    {
-        logs.WriteAllLog();
-        Flush();
-        SwitchDevice();
-    };
-
-    auto& HybridAtmosphereTerrainState = benchmark.AddState<WaitState>(TestTime, FileQueueWriter(Benchmark::GetLogFile(L"Hybrid Atmosphere Terrain ", *primeDevice, *secondDevice)));
-    HybridAtmosphereTerrainState.OnEnter = [this](FileQueueWriter& logs)
-    {
-        ResetCamera();
-        logs.PushMessage(L"FPS;MSPF;MinFPS;MinMSPF;MaxFPS;MaxMSPF");
-        SwitchDevice();
-        ChangeConfiguration();
-    };
-    HybridAtmosphereTerrainState.OnStatChanged = [this](FileQueueWriter& logs, const TimeStats& ts, float progress)
-    {
-        Benchmark::PrintStatsCSV(ts, logs);
-        MainWindow->SetWindowTitle(L"Hybrid Atmosphere Terrain Progress " + std::format(L"{:.2f}", progress * 100) + L"% FPS:" + std::to_wstring(ts.fps));
-    };
-    HybridAtmosphereTerrainState.OnExit = [this](FileQueueWriter& logs)
-    {
-        logs.WriteAllLog();
-        SwitchDevice();
-        Flush();
-        IsStop = true;
-    };
+        auto& HybridAtmosphereTerrainState = benchmark.AddState<WaitState>(TestTime, FileQueueWriter(Benchmark::GetLogFile(
+            std::format(L"Hybrid Atmosphere Terrain (SSAA {}) ", multiplier), *primeDevice, *secondDevice)));
+        HybridAtmosphereTerrainState.OnEnter = [this](FileQueueWriter& logs)
+            {
+                ResetCamera();
+                logs.PushMessage(L"FPS;MSPF;MinFPS;MinMSPF;MaxFPS;MaxMSPF");
+                SwitchDevice();
+                ChangeConfiguration();
+            };
+        HybridAtmosphereTerrainState.OnStatChanged = [this, multiplier](FileQueueWriter& logs, const TimeStats& ts, float progress)
+            {
+                Benchmark::PrintStatsCSV(ts, logs);
+                MainWindow->SetWindowTitle(std::format(L"Hybrid Atmosphere Terrain (SSAA {}) Progress ", multiplier) +
+                    std::format(L"{:.2f}", progress * 100) + L"% FPS:" + std::to_wstring(ts.fps));
+            };
+        HybridAtmosphereTerrainState.OnExit = [this, multiplier, lastMultiplier](FileQueueWriter& logs)
+            {
+                logs.WriteAllLog();
+                SwitchDevice();
+                ChangeConfiguration();
+                Flush();
+                IsStop = (multiplier == lastMultiplier);
+            };
+    }
 
 
 #if !defined(DEBUG) && !defined(_DEBUG)
@@ -1453,6 +1464,7 @@ void HybridAtmosphereApp::UpdateMainPassCB(const GameTimer& gt)
     mainPassCB.FarZ = camera->GetFarZ();
     mainPassCB.TotalTime = gt.TotalTime();
     mainPassCB.DeltaTime = gt.DeltaTime();
+    mainPassCB.SsaaMultilpier = antiAliasingPrimePath->GetMultiplier();
     mainPassCB.AmbientLight = Vector4{0.25f, 0.25f, 0.35f, 1.0f};
 
     for (int i = 0; i < MaxLights; ++i)

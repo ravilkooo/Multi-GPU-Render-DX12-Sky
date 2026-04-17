@@ -47,7 +47,7 @@ struct WorldData
     
 
     float3 CameraForwardVector;
-    float padding;
+    float SsaaMultilpier;
 
 
     Light Lights[MaxLights];

@@ -38,7 +38,7 @@ PPVertexOut PostProcessVS(uint vertexID : SV_VertexID)
 
 float4 PostProcessPS(PPVertexOut input) : SV_TARGET
 {
-	uint2 texCoord = input.PosH.xy;
+    uint2 texCoord = input.PosH.xy / worldBuffer.SsaaMultilpier;
 
     float4 rgbA = rayMarchingRes.Load(uint3(texCoord, 0));
     
