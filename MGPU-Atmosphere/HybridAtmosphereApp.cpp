@@ -1178,7 +1178,7 @@ void HybridAtmosphereApp::CreateGO()
     }
 
     auto particle = std::make_unique<GameObject>();
-    particle->GetTransform()->SetPosition(Vector3::Up + deltaUp);
+    particle->GetTransform()->SetPosition(Vector3::Up - Vector3::Right * 45 - Vector3::Forward * 36 + deltaUp);
     const auto emitter = std::make_shared<ParticleEmitter>(primeDevice, 10000);
     particle->AddComponent(emitter);
     typedRenderer[static_cast<int>(RenderMode::Particle)].push_back(emitter);
@@ -1204,7 +1204,7 @@ void HybridAtmosphereApp::CreateGO()
     auto camera = std::make_unique<GameObject>("MainCamera");
     camera->GetTransform()->SetParent(rotater->GetTransform().get());
     //camera->GetTransform()->SetPosition(Vector3(-1000, 190, -32));
-    camera->GetTransform()->SetPosition(Vector3(0, 0, -100));
+    camera->GetTransform()->SetPosition(Vector3(-1005.4f, 4.0f, -854.4f));
     //camera->GetTransform()->SetEulerRotate(Vector3(-30, 270, 0));
     camera->GetTransform()->SetEulerRotate(Vector3(0, -115, 0));
     camera->AddComponent(std::make_shared<Camera>(AspectRatio()));
