@@ -116,6 +116,7 @@ void HybridAtmosphereApp::UpdateAtmosphere()
 {
     float dt = Common::D3DApp::GetApp().GetTimer()->DeltaTime();
 
+#if defined(DEBUG) | defined(_DEBUG)
 	auto& app = static_cast<Common::D3DApp&>(Common::D3DApp::GetApp());
 	auto keyboard = app.GetKeyboard();
 
@@ -159,7 +160,26 @@ void HybridAtmosphereApp::UpdateAtmosphere()
     {
         skyAtmosphere->mTerrainPos += terrainMoveSpeed * Vector3::Backward * dt;
 	}
+#else
+    float terrainAbsoluteLow = -1.63f;
+    float terrainAbsoluteUp = -12.5f;
 
+    float atmosphereAbsoluteLow = 0.1f;
+    float atmosphereAbsoluteUp = 99.9f;
+
+    float terrainLocalLow = terrainAbsoluteLow - atmosphereAbsoluteLow;
+    float terrainLocalUp = terrainAbsoluteUp - atmosphereAbsoluteLow;
+
+    float atmosphereSpeed = 0.5f;
+    float terrainSpeed = 0.37f;
+
+    skyAtmosphere->mCamPosFinal.z = atmosphereAbsoluteLow +
+        (atmosphereAbsoluteUp - atmosphereAbsoluteLow) * 0.5 * (1 - cosf(atmosphereSpeed * timer.TotalTime()));
+
+    skyAtmosphere->mTerrainPos.z = skyAtmosphere->mCamPosFinal.z + terrainLocalLow +
+        (terrainLocalUp - terrainLocalLow) * 0.5 * (1 - cosf(terrainSpeed * timer.TotalTime()));
+
+#endif
     skyAtmosphere->mShadowmapViewProjMat = shadowPassCB.ViewProj;
 
     Vector3 forward = camera->gameObject->GetTransform()->GetForwardVector();
@@ -601,7 +621,7 @@ bool HybridAtmosphereApp::Initialize()
 
     int TestTime = 10;
 #if !defined(DEBUG) && !defined(_DEBUG)
-    TestTime = 8;
+    TestTime = 100;
 #endif
 
 
@@ -1175,16 +1195,19 @@ void HybridAtmosphereApp::CreateGO()
     //camera->GetTransform()->SetPosition(Vector3(-1000, 190, -32));
     camera->GetTransform()->SetPosition(Vector3(0, 0, -100));
     //camera->GetTransform()->SetEulerRotate(Vector3(-30, 270, 0));
-    camera->GetTransform()->SetEulerRotate(Vector3(0, 0, 0));
+    camera->GetTransform()->SetEulerRotate(Vector3(0, -115, 0));
     camera->AddComponent(std::make_shared<Camera>(AspectRatio()));
     camera->GetComponent<Camera>()->SetFarZ(30000.0f);
     CameraSaveMatrix = camera->GetTransform()->GetLocalMatrix();
 
+    camera->AddComponent(std::make_shared<CameraController>());
+    /*
 #if defined(DEBUG) || defined(_DEBUG)
     camera->AddComponent(std::make_shared<CameraController>());
 #else
     rotater->AddComponent(std::make_shared<Rotater>(10));
 #endif
+    */
 
     gameObjects.push_back(std::move(camera));
     gameObjects.push_back(std::move(rotater));
