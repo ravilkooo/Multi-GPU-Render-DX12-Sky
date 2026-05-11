@@ -455,13 +455,8 @@ void HybridAtmosphereApp::PopulateForwardPathCommands(const std::shared_ptr<GCom
                                       *currentFrameResource->PrimePassConstantUploadBuffer);
 
         cmdList->SetRootDescriptorTable(StandardShaderSlot::ShadowMap, shadowPath->GetSrv());
-        /*
-        if (IsUseHBAO)
-            cmdList->SetRootDescriptorTable(StandardShaderSlot::AmbientMap, hbaoPass->GetPrimeResources().GetAmbientMapSRV());
-        else
-        */
-            cmdList->SetRootDescriptorTable(StandardShaderSlot::AmbientMap, ssaoPass->GetPrimeResources().GetAmbientMapSRV(), 0);
 
+        cmdList->SetRootDescriptorTable(StandardShaderSlot::AmbientMap, ssaoPass->GetPrimeResources().GetAmbientMapSRV(), 0);
 
         // cmdList->SetPipelineState(*defaultPrimePipelineResources.GetPSO(RenderMode::SkyBox));
         // PopulateDrawCommands(cmdList, (RenderMode::SkyBox));
@@ -471,10 +466,6 @@ void HybridAtmosphereApp::PopulateForwardPathCommands(const std::shared_ptr<GCom
 
         cmdList->SetPipelineState(*defaultPrimePipelineResources.GetPSO(RenderMode::Opaque));
         PopulateDrawCommands(cmdList, (RenderMode::Opaque));
-
-
-        // cmdList->SetPipelineState(*mCustomAppPSOs[RenderMode::Terrain]);
-        // PopulateDrawCommands(cmdList, RenderMode::Terrain);
 
         cmdList->SetPipelineState(*defaultPrimePipelineResources.GetPSO(RenderMode::OpaqueAlphaDrop));
         PopulateDrawCommands(cmdList, (RenderMode::OpaqueAlphaDrop));

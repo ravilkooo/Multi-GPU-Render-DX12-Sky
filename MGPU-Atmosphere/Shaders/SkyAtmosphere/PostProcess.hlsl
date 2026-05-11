@@ -43,8 +43,7 @@ float4 PostProcessPS(PPVertexOut input) : SV_TARGET
     float4 rgbA = rayMarchingRes.Load(uint3(texCoord, 0));
     
 	rgbA /= rgbA.aaaa;	// Normalize according to sample count when path tracing
-
-	// Similar setup to the Bruneton demo
+    
 	float3 white_point = float3(1.08241, 0.96756, 0.95003);
 	float exposure = 10.0;
     
